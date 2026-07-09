@@ -240,6 +240,33 @@ async function startServer() {
     }
   });
 
+  // Serve static audio files for both dev and prod
+  const audioPath = path.join(process.cwd(), "audio");
+  if (fs.existsSync(audioPath)) {
+    app.use("/audio", express.static(audioPath));
+  }
+
+  // Serve root level images securely for both dev and prod
+  app.use((req, res, next) => {
+    try {
+      const decodedPath = decodeURIComponent(req.path);
+      const ext = path.extname(decodedPath).toLowerCase();
+      console.log(`[DEBUG_STATIC_IMAGES] req.path: "${req.path}", decodedPath: "${decodedPath}", ext: "${ext}"`);
+      if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"].includes(ext)) {
+        const safePath = path.normalize(decodedPath).replace(/^(\.\.[\/\\])+/, "");
+        const cleanPath = safePath.startsWith("/") ? safePath.slice(1) : safePath;
+        const filePath = path.join(process.cwd(), cleanPath);
+        console.log(`[DEBUG_STATIC_IMAGES] filePath: "${filePath}", exists: ${fs.existsSync(filePath)}`);
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          return res.sendFile(filePath);
+        }
+      }
+    } catch (err: any) {
+      console.error("[DEBUG_STATIC_IMAGES] Error:", err);
+    }
+    next();
+  });
+
   // Vite middleware for development or fallback to production static serving
   const isProd = process.env.NODE_ENV === "production" || fs.existsSync(path.join(process.cwd(), "dist"));
 
@@ -252,18 +279,6 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-
-    // Serve static audio files in production
-    const audioPath = path.join(process.cwd(), "audio");
-    if (fs.existsSync(audioPath)) {
-      app.use("/audio", express.static(audioPath));
-    }
-
-    // Serve root level images (png/jpg) in production
-    app.use(express.static(process.cwd(), {
-      index: false,
-      extensions: ["png", "jpg", "jpeg"]
-    }));
 
     app.use(express.static(distPath));
     app.get("*", (req, res) => {

@@ -1638,7 +1638,7 @@ Só quero viver minha vida, mas não consigo...`
                 <div className="relative aspect-square w-full max-w-[280px] mx-auto rounded-xl overflow-hidden shadow-lg border border-zinc-850">
                   {!albumOriginalError ? (
                     <img 
-                      src="teonanacatl_94.jpg" 
+                      src="/Teonanacatl 94.jpg" 
                       alt="Capa Teonanacatl 94"
                       onError={() => setAlbumOriginalError(true)}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -1722,7 +1722,7 @@ Só quero viver minha vida, mas não consigo...`
                 <div className="relative aspect-square w-full max-w-[280px] mx-auto rounded-xl overflow-hidden shadow-lg border border-zinc-850">
                   {!albumRecoveredError ? (
                     <img 
-                      src="teonanacatl_1994_recovered_final.png" 
+                      src="/Teonanacatl 1994 (ReCovered) - Final.png" 
                       alt="Capa Teonanacatl 94 ReCovered"
                       onError={() => setAlbumRecoveredError(true)}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
