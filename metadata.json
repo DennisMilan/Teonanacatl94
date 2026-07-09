@@ -1,0 +1,8 @@
+{
+  "name": "Teonanacatl 94",
+  "description": "Immersive Cyber-Mesoamerican Rock Band landing page",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
