@@ -240,6 +240,24 @@ async function startServer() {
     }
   });
 
+  // Direct endpoint to download the GoDaddy deployment ZIP file
+  app.get("/deploy_godaddy.zip", (req, res) => {
+    try {
+      const zipPath = path.join(process.cwd(), "deploy_godaddy.zip");
+      if (fs.existsSync(zipPath)) {
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", "attachment; filename=deploy_godaddy.zip");
+        const fileStream = fs.createReadStream(zipPath);
+        fileStream.pipe(res);
+      } else {
+        res.status(404).send("Arquivo deploy_godaddy.zip não encontrado na raiz do projeto. Por favor, solicite a geração do build novamente.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao fazer download do deploy_godaddy.zip:", err);
+      res.status(500).send("Erro interno ao servir o arquivo ZIP.");
+    }
+  });
+
   // Serve static audio files for both dev and prod
   const audioPath = path.join(process.cwd(), "audio");
   if (fs.existsSync(audioPath)) {

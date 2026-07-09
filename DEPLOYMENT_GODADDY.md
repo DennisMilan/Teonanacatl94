@@ -23,7 +23,7 @@ Você tem duas opções para subir a sua aplicação:
 2. Isso gerará as pastas e arquivos compilados:
    - `dist/` (Contém o frontend compilado e o servidor backend empacotado `dist/server.cjs`)
    - `audio/` (Contém as faixas de áudio otimizadas)
-   - Arquivos estáticos de imagem na raiz (ex: `banda_para_youtube.png`, `teonanacatl_1994_recovered_final.png`, `teonanacatl_94.jpg`)
+   - Arquivos estáticos de imagem na raiz (ex: `banda_para_youtube.png`, `Teonanacatl 94.jpg`, `Teonanacatl 1994 (ReCovered) - Final.png`)
 3. Compacte os seguintes arquivos e pastas em um arquivo **`.zip`**:
    - `dist/`
    - `audio/`
