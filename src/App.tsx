@@ -285,65 +285,23 @@ export default function App() {
   const [albumOriginalError, setAlbumOriginalError] = useState(false);
   const [albumRecoveredError, setAlbumRecoveredError] = useState(false);
 
-  // Fan Club & Voting states
+  // Fan Club states
   const [fanName, setFanName] = useState('');
   const [fanEmail, setFanEmail] = useState('');
   const [fanDdi, setFanDdi] = useState('+55');
   const [fanPhone, setFanPhone] = useState('');
   const [fanInstagram, setFanInstagram] = useState('');
+  const [fanCountry, setFanCountry] = useState('Brasil');
+  const [fanState, setFanState] = useState('');
   const [fanCity, setFanCity] = useState('');
   const [fanFavTrack, setFanFavTrack] = useState('');
+  const [fanMessage, setFanMessage] = useState('');
   const [isSubmittingFan, setIsSubmittingFan] = useState(false);
   const [fanSubmitStatus, setFanSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [registeredFans, setRegisteredFans] = useState<any[]>([]);
-  const [showFansList, setShowFansList] = useState(false);
-  const [isLoadingFans, setIsLoadingFans] = useState(false);
-
-  const [voteTrack, setVoteTrack] = useState('');
-  const [isSubmittingVote, setIsSubmittingVote] = useState(false);
-  const [votesData, setVotesData] = useState<Record<string, number>>({});
-  const [hasVoted, setHasVoted] = useState(false);
-
-  // Load vote counts and user's vote history on mount
-  useEffect(() => {
-    fetch('/api/fans/results')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setVotesData(data.votes);
-        }
-      })
-      .catch(err => console.error("Erro ao carregar resultados das votações:", err));
-
-    if (localStorage.getItem('teonanacatl_voted')) {
-      setHasVoted(true);
-    }
-  }, []);
-
-  const fetchFansList = async () => {
-    setIsLoadingFans(true);
-    try {
-      const res = await fetch('/api/fans/list');
-      const data = await res.json();
-      if (data.success) {
-        setRegisteredFans(data.fans);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar lista de fãs:", err);
-    } finally {
-      setIsLoadingFans(false);
-    }
-  };
-
-  useEffect(() => {
-    if (showFansList) {
-      fetchFansList();
-    }
-  }, [showFansList]);
 
   const handleRegisterFan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fanName || !fanEmail) return;
+    if (!fanName || !fanEmail || !fanCountry || !fanState || !fanCity) return;
 
     setIsSubmittingFan(true);
     setFanSubmitStatus('idle');
@@ -359,8 +317,11 @@ export default function App() {
           email: fanEmail,
           phone: fanPhone ? `${fanDdi} ${fanPhone}` : '',
           instagram: fanInstagram,
+          country: fanCountry,
+          state: fanState,
           city: fanCity,
-          favoriteTrack: fanFavTrack || 'Nenhuma'
+          favoriteTrack: fanFavTrack,
+          message: fanMessage,
         }),
       });
 
@@ -372,28 +333,11 @@ export default function App() {
         setFanDdi('+55');
         setFanPhone('');
         setFanInstagram('');
+        setFanCountry('Brasil');
+        setFanState('');
         setFanCity('');
         setFanFavTrack('');
-        
-        // Refresh votes if the user registered with a favorite track
-        if (fanFavTrack) {
-          // Trigger automatic vote for their favorite track as well!
-          await fetch('/api/fans/vote', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trackTitle: fanFavTrack }),
-          });
-          const res = await fetch('/api/fans/results');
-          const votesRes = await res.json();
-          if (votesRes.success) {
-            setVotesData(votesRes.votes);
-            setHasVoted(true);
-            localStorage.setItem('teonanacatl_voted', 'true');
-          }
-        }
-
-        // Refresh fans list if it is open or to keep it updated
-        fetchFansList();
+        setFanMessage('');
       } else {
         setFanSubmitStatus('error');
       }
@@ -402,34 +346,6 @@ export default function App() {
       setFanSubmitStatus('error');
     } finally {
       setIsSubmittingFan(false);
-    }
-  };
-
-  const handleVote = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!voteTrack) return;
-
-    setIsSubmittingVote(true);
-
-    try {
-      const response = await fetch('/api/fans/vote', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ trackTitle: voteTrack }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setVotesData(data.votes);
-        setHasVoted(true);
-        localStorage.setItem('teonanacatl_voted', 'true');
-      }
-    } catch (error) {
-      console.error("Erro ao votar:", error);
-    } finally {
-      setIsSubmittingVote(false);
     }
   };
 
@@ -2091,15 +2007,15 @@ Só quero viver minha vida, mas não consigo...`
             <div className="h-0.5 bg-gradient-to-r from-pink-500/50 to-transparent w-48 mt-2"></div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="max-w-2xl mx-auto">
             
-            {/* COLUMN 1: CADASTRO DO FÃ (5 cols) */}
-            <div className="lg:col-span-5 bg-zinc-950/80 rounded-2xl border border-zinc-900 p-6 shadow-2xl space-y-6">
+            {/* CADASTRO DO FÃ */}
+            <div className="bg-zinc-950/80 rounded-2xl border border-zinc-900 p-6 sm:p-8 shadow-2xl space-y-6">
               <div>
                 <span className="font-orbitron text-[13px] text-emerald-400 font-bold block uppercase tracking-widest mb-1">// CADASTRO OFICIAL</span>
                 <h3 className="font-orbitron font-bold text-xl text-white uppercase tracking-wider">ENTRAR PARA O TEONANACLÃ</h3>
                 <p className="text-zinc-400 text-xs mt-2 leading-relaxed">
-                  Cadastre-se na nossa base oficial para receber novidades em primeira mão sobre shows e lançamentos!
+                  Cadastre-se na nossa base oficial para enviar sua mensagem e receber novidades em primeira mão sobre shows e lançamentos!
                 </p>
               </div>
 
@@ -2110,7 +2026,7 @@ Só quero viver minha vida, mas não consigo...`
                   </div>
                   <h4 className="font-orbitron font-bold text-sm text-white uppercase tracking-wider">CADASTRO CONFIRMADO!</h4>
                   <p className="text-xs text-zinc-300 leading-relaxed">
-                    Você agora faz parte do núcleo de apoiadores da Teonanacatl 94. Fique de olho no seu e-mail e celular para futuras transmissões! E siga o Teonanacatl nas Redes Sociais!
+                    Você agora faz parte do núcleo de apoiadores da Teonanacatl 94. Sua mensagem e informações foram enviadas para a banda!
                   </p>
                   <button 
                     onClick={() => setFanSubmitStatus('idle')}
@@ -2182,34 +2098,95 @@ Só quero viver minha vida, mas não consigo...`
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Cidade / UF</label>
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">País *</label>
+                      <select 
+                        required
+                        value={fanCountry}
+                        onChange={(e) => setFanCountry(e.target.value)}
+                        className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-mono cursor-pointer"
+                      >
+                        <option value="Brasil" className="bg-zinc-950 text-zinc-300">Brasil</option>
+                        <option value="Portugal" className="bg-zinc-950 text-zinc-300">Portugal</option>
+                        <option value="Angola" className="bg-zinc-950 text-zinc-300">Angola</option>
+                        <option value="Moçambique" className="bg-zinc-950 text-zinc-300">Moçambique</option>
+                        <option value="Cabo Verde" className="bg-zinc-950 text-zinc-300">Cabo Verde</option>
+                        <option value="Guiné-Bissau" className="bg-zinc-950 text-zinc-300">Guiné-Bissau</option>
+                        <option value="São Tomé e Príncipe" className="bg-zinc-950 text-zinc-300">São Tomé e Príncipe</option>
+                        <option value="Timor-Leste" className="bg-zinc-950 text-zinc-300">Timor-Leste</option>
+                        <option value="Argentina" className="bg-zinc-950 text-zinc-300">Argentina</option>
+                        <option value="Uruguai" className="bg-zinc-950 text-zinc-300">Uruguai</option>
+                        <option value="Paraguai" className="bg-zinc-950 text-zinc-300">Paraguai</option>
+                        <option value="Chile" className="bg-zinc-950 text-zinc-300">Chile</option>
+                        <option value="Colômbia" className="bg-zinc-950 text-zinc-300">Colômbia</option>
+                        <option value="Peru" className="bg-zinc-950 text-zinc-300">Peru</option>
+                        <option value="Bolívia" className="bg-zinc-950 text-zinc-300">Bolívia</option>
+                        <option value="Equador" className="bg-zinc-950 text-zinc-300">Equador</option>
+                        <option value="Venezuela" className="bg-zinc-950 text-zinc-300">Venezuela</option>
+                        <option value="Estados Unidos" className="bg-zinc-950 text-zinc-300">Estados Unidos</option>
+                        <option value="Canadá" className="bg-zinc-950 text-zinc-300">Canadá</option>
+                        <option value="Reino Unido" className="bg-zinc-950 text-zinc-300">Reino Unido</option>
+                        <option value="Alemanha" className="bg-zinc-950 text-zinc-300">Alemanha</option>
+                        <option value="França" className="bg-zinc-950 text-zinc-300">França</option>
+                        <option value="Espanha" className="bg-zinc-950 text-zinc-300">Espanha</option>
+                        <option value="Itália" className="bg-zinc-950 text-zinc-300">Itália</option>
+                        <option value="Japão" className="bg-zinc-950 text-zinc-300">Japão</option>
+                        <option value="Outro" className="bg-zinc-950 text-zinc-300">Outro</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Estado *</label>
                       <input 
                         type="text" 
+                        required
+                        value={fanState}
+                        onChange={(e) => setFanState(e.target.value)}
+                        placeholder="Ex: SP"
+                        className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Cidade *</label>
+                      <input 
+                        type="text" 
+                        required
                         value={fanCity}
                         onChange={(e) => setFanCity(e.target.value)}
-                        placeholder="Ex: São Paulo - SP"
+                        placeholder="Ex: São Paulo"
                         className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Escolha sua Música Favorita</label>
+                    <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Música Favorita *</label>
                     <select 
+                      required
                       value={fanFavTrack}
                       onChange={(e) => setFanFavTrack(e.target.value)}
-                      className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-mono"
+                      className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-mono cursor-pointer"
                     >
-                      <option value="" className="bg-zinc-950">Selecione uma faixa...</option>
+                      <option value="" className="bg-zinc-950 text-zinc-500">Selecione sua faixa favorita...</option>
                       {tracks.map((track, idx) => (
                         <option key={idx} value={track.title} className="bg-zinc-950 text-zinc-300">
                           {idx + 1}. {track.title}
                         </option>
                       ))}
                     </select>
-                    <span className="text-[10px] font-mono text-zinc-500 mt-1 block leading-normal">
-                      Ao selecionar uma música favorita, ela receberá um voto automático!
-                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Mensagem *</label>
+                    <textarea 
+                      required
+                      value={fanMessage}
+                      onChange={(e) => setFanMessage(e.target.value)}
+                      placeholder="Escreva sua mensagem para a banda..."
+                      rows={4}
+                      className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans resize-none text-zinc-100"
+                    />
                   </div>
 
                   {fanSubmitStatus === 'error' && (
@@ -2224,102 +2201,10 @@ Só quero viver minha vida, mas não consigo...`
                     className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 text-xs font-bold font-orbitron tracking-widest uppercase text-white rounded-lg transition-all flex items-center justify-center space-x-2 shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{isSubmittingFan ? 'REGISTRANDO...' : 'CADASTRAR E ENTRAR NO CLÃ'}</span>
+                    <span>{isSubmittingFan ? 'ENVIANDO...' : 'ENVIAR MENSAGEM E ENTRAR NO CLÃ'}</span>
                   </button>
                 </form>
               )}
-            </div>
-
-            {/* COLUMN 2: VOTAÇÃO & APURAÇÃO DOS FÃS (7 cols) */}
-            <div className="lg:col-span-7 bg-zinc-950/80 rounded-2xl border border-zinc-900 p-6 shadow-2xl flex flex-col justify-between h-full space-y-6">
-              <div className="space-y-2">
-                <span className="font-orbitron text-[13px] text-pink-400 font-bold block uppercase tracking-widest">// REPERTÓRIO PREFERIDO</span>
-                <h3 className="font-orbitron font-bold text-xl text-white uppercase tracking-wider">APURAÇÃO & VOTAÇÃO EM TEMPO REAL</h3>
-                <p className="text-zinc-400 text-xs leading-relaxed">
-                  Vote na sua canção favorita do álbum clássico ou das remasters de 2026! O resultado ajuda a desenhar as setlists e os novos lançamentos.
-                </p>
-              </div>
-
-              {/* Vote Casting Component */}
-              <div className="bg-zinc-900/40 p-4 rounded-xl border border-zinc-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                {hasVoted ? (
-                  <div className="flex items-center space-x-3 text-emerald-400 animate-fadeIn">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                      <Check className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold font-orbitron uppercase tracking-wider text-white">Voto Computado com Sucesso!</p>
-                      <p className="text-[10px] text-zinc-500 font-mono">Você já deu o seu eco nas frequências da banda neste ciclo.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <form onSubmit={handleVote} className="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <div className="flex-1">
-                      <select 
-                        required
-                        value={voteTrack}
-                        onChange={(e) => setVoteTrack(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-pink-500/60 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none transition-all font-mono"
-                      >
-                        <option value="">Selecione uma faixa para votar...</option>
-                        {tracks.map((track, idx) => (
-                          <option key={idx} value={track.title}>
-                            {idx + 1}. {track.title}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button 
-                      type="submit"
-                      disabled={isSubmittingVote || !voteTrack}
-                      className="px-5 py-2.5 bg-zinc-900 border border-zinc-800 hover:border-pink-500 hover:text-pink-400 text-xs font-bold font-orbitron tracking-widest uppercase text-white rounded-lg transition-all flex items-center justify-center space-x-2 cursor-pointer whitespace-nowrap"
-                    >
-                      <span>VOTAR</span>
-                    </button>
-                  </form>
-                )}
-              </div>
-
-              {/* Apuração (Real-time horizontal bar graph) */}
-              <div className="space-y-4 flex-1">
-                <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest block border-b border-zinc-900 pb-1.5">
-                  // APURAÇÃO GERAL DOS VOTOS DO REPERTÓRIO
-                </span>
-
-                {Object.keys(votesData).length === 0 ? (
-                  <div className="py-20 text-center text-xs font-mono text-zinc-600 animate-pulse">
-                    RECEBENDO SINAL DE APURAÇÃO...
-                  </div>
-                ) : (
-                  <div className="space-y-3.5 max-h-[280px] overflow-y-auto pr-2 scrollbar-thin">
-                    {Object.entries(votesData)
-                      .sort((a, b) => (b[1] as number) - (a[1] as number)) // Sort descending
-                      .map(([trackName, count], idx) => {
-                        const maxVotes = Math.max(...(Object.values(votesData) as number[]), 1);
-                        const percentage = Math.round(((count as number) / maxVotes) * 100);
-                        return (
-                          <div key={trackName} className="space-y-1 group">
-                            <div className="flex items-center justify-between text-[11px] font-mono">
-                              <span className="text-zinc-300 font-medium truncate max-w-[200px] sm:max-w-md">
-                                <span className="text-zinc-500 font-bold mr-1.5">#{idx + 1}</span> {trackName}
-                              </span>
-                              <span className="text-zinc-500 font-semibold">
-                                <span className="text-pink-400 font-bold">{count}</span> votos
-                              </span>
-                            </div>
-                            <div className="h-2 w-full bg-zinc-900/60 border border-zinc-950 rounded-full overflow-hidden flex relative">
-                              <div 
-                                className="h-full rounded-full bg-gradient-to-r from-emerald-500/80 to-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.3)] transition-all duration-1000"
-                                style={{ width: `${percentage}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-
             </div>
 
           </div>

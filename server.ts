@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import nodemailer from "nodemailer";
 
 async function startServer() {
   const app = express();
@@ -45,8 +46,6 @@ async function startServer() {
     fs.mkdirSync(nanosDir, { recursive: true });
   }
 
-  const cadastroFile = path.join(nanosDir, "cadastro.csv");
-
   // Safe timezone timestamp helper to prevent container RangeError for 'America/Sao_Paulo'
   function getTimestamp() {
     try {
@@ -60,214 +59,187 @@ async function startServer() {
     }
   }
 
-  // Initial votes starting from 0 for all 16 tracks, ensuring pure data from cadastro.csv
-  const defaultVotes: Record<string, number> = {
-    "Dentro de Mim": 0,
-    "Solitude": 0,
-    "Como Poderei Sonhar": 0,
-    "Mundo": 0,
-    "Meu Vazio": 0,
-    "Esperança": 0,
-    "Máscara": 0,
-    "Minha Vida": 0,
-    "O Último Tolteca": 0,
-    "Sombras de um Caminho": 0,
-    "Bright Eyes": 0,
-    "Dia Após o Outro": 0,
-    "Outra Face do Dia": 0,
-    "Rochas": 0,
-    "Será Que Eu Errei": 0,
-    "Cinema Imaginário (Bonus Track)": 0,
-  };
+  // ==========================================
+  // SMTP EMAIL TRANSPORTER LAZY INITIALIZATION
+  // ==========================================
+  let transporter: nodemailer.Transporter | null = null;
 
-  function getCalculatedVotes() {
-    const votes = { ...defaultVotes };
+  function getMailTransporter() {
+    if (transporter) return transporter;
 
-    if (fs.existsSync(cadastroFile)) {
-      try {
-        const fileContent = fs.readFileSync(cadastroFile, "utf-8");
-        const lines = fileContent.split("\n").filter(line => line.trim() !== "");
-        if (lines.length > 1) {
-          const parseCSVLine = (text: string) => {
-            const result = [];
-            let cur = "";
-            let inQuotes = false;
-            for (let i = 0; i < text.length; i++) {
-              const char = text[i];
-              if (char === '"') {
-                if (inQuotes && text[i + 1] === '"') {
-                  cur += '"';
-                  i++;
-                } else {
-                  inQuotes = !inQuotes;
-                }
-              } else if (char === ',' && !inQuotes) {
-                result.push(cur);
-                cur = "";
-              } else {
-                cur += char;
-              }
-            }
-            result.push(cur);
-            return result;
-          };
+    const host = process.env.SMTP_HOST;
+    const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
 
-          for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLine(lines[i]);
-            const favoriteTrack = parts[6]; // Musica_Favorita is column 7 (index 6)
-            if (favoriteTrack && favoriteTrack.trim() !== "") {
-              const trackName = favoriteTrack.trim();
-              let normalizedTrack = trackName;
-              if (trackName === "Cinema Imaginário") {
-                normalizedTrack = "Cinema Imaginário (Bonus Track)";
-              }
-              votes[normalizedTrack] = (votes[normalizedTrack] || 0) + 1;
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Error calculating votes from CSV:", err);
-      }
+    if (!host || !user || !pass) {
+      console.warn("SMTP credentials (SMTP_HOST, SMTP_USER, SMTP_PASS) are not fully configured. Email sending will be simulated.");
+      return null;
     }
-    return votes;
+
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: {
+        user,
+        pass,
+      },
+    });
+
+    return transporter;
   }
 
-  // API Routes
-  app.get("/api/fans/results", (req, res) => {
+  // Simplified fan registration (No Database, sends CSV email attachment)
+  app.post("/api/fans/register", async (req, res) => {
     try {
-      const votes = getCalculatedVotes();
-      res.json({ success: true, votes });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/fans/register", (req, res) => {
-    try {
-      const { name, email, phone, instagram, city, favoriteTrack } = req.body;
+      const { name, email, phone, instagram, country, state, city, favoriteTrack, message } = req.body;
       
-      if (!name || !email) {
-        return res.status(400).json({ error: "Nome e Email são obrigatórios." });
-      }
-
-      // Ensure file has header
-      const csvHeader = `"Data/Hora","Nome","Email","Celular","Instagram","Cidade","Musica_Favorita"\n`;
-      if (!fs.existsSync(cadastroFile)) {
-        fs.writeFileSync(cadastroFile, csvHeader, "utf-8");
+      if (!name || !email || !country || !state || !city) {
+        return res.status(400).json({ error: "Nome, Email, País, Estado e Cidade são obrigatórios." });
       }
 
       const timestamp = getTimestamp();
-      const sanitize = (val: string) => `"${(val || "").replace(/"/g, '""')}"`;
-      
-      const csvLine = `${sanitize(timestamp)},${sanitize(name)},${sanitize(email)},${sanitize(phone)},${sanitize(instagram)},${sanitize(city)},${sanitize(favoriteTrack)}\n`;
-      
-      fs.appendFileSync(cadastroFile, csvLine, "utf-8");
-      console.log(`Fã registrado com sucesso no cadastro.csv: ${name} (${email})`);
-      
-      res.json({ success: true });
-    } catch (err: any) {
-      console.error("Erro ao registrar fã:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
 
-  app.get("/api/fans/list", (req, res) => {
-    try {
-      if (!fs.existsSync(cadastroFile)) {
-        return res.json({ success: true, fans: [] });
-      }
-      const fileContent = fs.readFileSync(cadastroFile, "utf-8");
-      const lines = fileContent.split("\n").filter(line => line.trim() !== "");
-      if (lines.length <= 1) {
-        return res.json({ success: true, fans: [] });
-      }
-      
-      const parseCSVLine = (text: string) => {
-        const result = [];
-        let cur = "";
-        let inQuotes = false;
-        for (let i = 0; i < text.length; i++) {
-          const char = text[i];
-          if (char === '"') {
-            if (inQuotes && text[i + 1] === '"') {
-              cur += '"';
-              i++;
-            } else {
-              inQuotes = !inQuotes;
-            }
-          } else if (char === ',' && !inQuotes) {
-            result.push(cur);
-            cur = "";
-          } else {
-            cur += char;
+      // Create CSV Attachment
+      const sanitize = (val: string) => `"${(val || "").replace(/"/g, '""')}"`;
+      const csvHeader = `"Data/Hora","Nome","Email","Celular","Instagram","País","Estado","Cidade","Música Favorita","Mensagem"\n`;
+      const csvLine = `${sanitize(timestamp)},${sanitize(name)},${sanitize(email)},${sanitize(phone || "")},${sanitize(instagram || "")},${sanitize(country)},${sanitize(state)},${sanitize(city)},${sanitize(favoriteTrack || "")},${sanitize(message || "")}\n`;
+      const csvContent = "\ufeff" + csvHeader + csvLine;
+
+      console.log(`[NOVO CADASTRO] Nome: ${name}, Email: ${email}, País: ${country}, Estado: ${state}, Cidade: ${city}, Música: ${favoriteTrack}`);
+
+      // Setup email payload for the band
+      const mailOptions = {
+        from: process.env.EMAIL_FROM || '"Teonanacatl 94 Clã" <no-reply@teonanacatl94.com>',
+        to: 'teonanacatl1994@gmail.com',
+        subject: `Novo Cadastro de Fã: ${name}`,
+        text: `Olá!\n\nUm novo fã se cadastrou no site oficial da banda Teonanacatl 94:\n\n` +
+              `- Nome: ${name}\n` +
+              `- Email: ${email}\n` +
+              `- Celular/WhatsApp: ${phone || "Não informado"}\n` +
+              `- Instagram: ${instagram || "Não informado"}\n` +
+              `- País: ${country}\n` +
+              `- Estado: ${state}\n` +
+              `- Cidade: ${city}\n` +
+              `- Música Favorita: ${favoriteTrack || "Não informada"}\n` +
+              `- Mensagem: ${message || "Nenhuma mensagem enviada."}\n\n` +
+              `As informações detalhadas também foram anexadas a este e-mail em formato CSV.\n\n` +
+              `Abraços,\nSite Teonanacatl 94`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px;">
+            <h2 style="color: #10b981; border-bottom: 2px solid #10b981; padding-bottom: 10px; margin-top: 0;">Novo Cadastro de Fã!</h2>
+            <p>Um novo fã acaba de se cadastrar no site oficial da banda <strong>Teonanacatl 94</strong>:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; width: 150px; border-bottom: 1px solid #f0f0f0;">Nome:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Email:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Celular/WhatsApp:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${phone || "Não informado"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Instagram:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${instagram || "Não informado"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">País:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${country}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Estado:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${state}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Cidade:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${city}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Música Favorita:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0; color: #10b981; font-weight: bold;">${favoriteTrack || "Não informada"}</td>
+              </tr>
+            </table>
+            <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0; border-radius: 4px;">
+              <strong style="display: block; margin-bottom: 5px;">Mensagem:</strong>
+              <p style="margin: 0; white-space: pre-wrap; font-style: italic;">${message || "Nenhuma mensagem enviada."}</p>
+            </div>
+            <p style="font-size: 12px; color: #666; margin-top: 30px; border-top: 1px solid #eaeaea; padding-top: 10px;">
+              Este e-mail foi gerado automaticamente pelo formulário de cadastro do site Teonanacatl 94. As informações estão em anexo no arquivo <strong>cadastro_fa.csv</strong>.
+            </p>
+          </div>
+        `,
+        attachments: [
+          {
+            filename: 'cadastro_fa.csv',
+            content: csvContent,
+            contentType: 'text/csv',
           }
-        }
-        result.push(cur);
-        return result;
+        ]
       };
 
-      const fans = lines.slice(1).map(line => {
-        const parts = parseCSVLine(line);
-        return {
-          timestamp: parts[0] || "",
-          name: parts[1] || "",
-          email: parts[2] || "",
-          phone: parts[3] || "",
-          instagram: parts[4] || "",
-          city: parts[5] || "",
-          favoriteTrack: parts[6] || ""
-        };
-      });
+      // Setup thank you email to the fan
+      const thankYouMailOptions = {
+        from: process.env.EMAIL_FROM || '"Teonanacatl 94" <no-reply@teonanacatl94.com>',
+        to: email,
+        subject: `Bem-vindo ao Clã, ${name}! 🤘`,
+        text: `Olá, ${name}!\n\n` +
+              `Agradecemos muito por se cadastrar no site oficial da banda Teonanacatl 94 e entrar para o nosso Clã!\n\n` +
+              `Recebemos suas informações e sua mensagem. É uma honra ter você conosco vibrando na mesma frequência.\n\n` +
+              `Sua música favorita selecionada: ${favoriteTrack || "Não informada"}\n\n` +
+              `Fique ligado em nosso site para novidades, datas de shows e lançamentos futuros!\n\n` +
+              `Abraços,\nBanda Teonanacatl 94`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px; background-color: #0c0c0e; color: #f4f4f5;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="color: #10b981; font-size: 24px; margin-bottom: 5px; font-family: sans-serif; letter-spacing: 2px;">TEONANACATL 94</h1>
+              <p style="color: #a1a1aa; font-size: 14px; margin: 0;">O Clã dos Cyber-Fãs</p>
+            </div>
+            <div style="border-top: 1px solid #27272a; padding-top: 20px;">
+              <p style="color: #ffffff;">Olá, <strong>${name}</strong>!</p>
+              <p style="color: #d4d4d8; line-height: 1.6;">É uma honra dar as boas-vindas a você no nosso círculo oficial de apoiadores, o <strong>TeonanaClã</strong>!</p>
+              <p style="color: #d4d4d8; line-height: 1.6;">Sua mensagem e seus dados de cadastro foram entregues diretamente à banda. Agradecemos muito por compartilhar seu apoio conosco.</p>
+              <div style="background-color: #18181b; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0; border-radius: 4px;">
+                <span style="color: #a1a1aa; font-size: 12px; display: block; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">Sua Música Favorita:</span>
+                <strong style="color: #ffffff; font-size: 15px;">${favoriteTrack || "Não informada"}</strong>
+              </div>
+              <p style="color: #d4d4d8; line-height: 1.6;">Prepare-se para receber atualizações exclusivas sobre novos lançamentos digitais, fita cassete, remasters de 2026 e as próximas apresentações na estrada.</p>
+              <p style="margin-top: 30px; border-top: 1px solid #27272a; padding-top: 15px; font-size: 13px; color: #a1a1aa; line-height: 1.5;">
+                Siga as nossas redes e continue escutando o álbum!<br><br>
+                <strong>Banda Teonanacatl 94</strong>
+              </p>
+            </div>
+          </div>
+        `
+      };
 
-      res.json({ success: true, fans });
-    } catch (err: any) {
-      console.error("Erro ao listar fãs:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
+      const mailTransporter = getMailTransporter();
+      if (mailTransporter) {
+        // Send email to the band
+        await mailTransporter.sendMail(mailOptions);
+        console.log(`[EMAIL ENVIADO] Cadastro enviado para teonanacatl1994@gmail.com`);
 
-  app.get("/api/fans/download", (req, res) => {
-    try {
-      if (fs.existsSync(cadastroFile)) {
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Content-Disposition", "attachment; filename=cadastro.csv");
-        const fileStream = fs.createReadStream(cadastroFile);
-        fileStream.pipe(res);
+        // Send thank you email to the fan
+        try {
+          await mailTransporter.sendMail(thankYouMailOptions);
+          console.log(`[EMAIL ENVIADO] Email de agradecimento enviado para o fã: ${email}`);
+        } catch (thankYouErr) {
+          console.error("Erro ao enviar email de agradecimento para o fã:", thankYouErr);
+          // Don't fail the whole request if only the thank you email fails
+        }
       } else {
-        res.status(404).json({ error: "Arquivo de cadastro não encontrado." });
+        console.log(`[EMAIL SIMULADO] Email da banda não enviado porque SMTP não está configurado. Opções de envio:`, mailOptions);
+        console.log(`[EMAIL SIMULADO] Email de agradecimento ao fã não enviado porque SMTP não está configurado. Opções de envio:`, thankYouMailOptions);
       }
+
+      res.json({ success: true, message: "Cadastro enviado com sucesso!" });
     } catch (err: any) {
-      console.error("Erro ao baixar cadastro.csv:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/fans/vote", (req, res) => {
-    try {
-      const { trackTitle } = req.body;
-      if (!trackTitle) {
-        return res.status(400).json({ error: "Faixa é obrigatória para votação." });
-      }
-
-      // Ensure file has header
-      const csvHeader = `"Data/Hora","Nome","Email","Celular","Instagram","Cidade","Musica_Favorita"\n`;
-      if (!fs.existsSync(cadastroFile)) {
-        fs.writeFileSync(cadastroFile, csvHeader, "utf-8");
-      }
-
-      const timestamp = getTimestamp();
-      const sanitize = (val: string) => `"${(val || "").replace(/"/g, '""')}"`;
-      
-      const csvLine = `${sanitize(timestamp)},${sanitize("Anônimo (Voto Direto)")},${sanitize("voto_direto@teonanacatl94.com")},${sanitize("")},${sanitize("")},${sanitize("")},${sanitize(trackTitle)}\n`;
-      fs.appendFileSync(cadastroFile, csvLine, "utf-8");
-
-      console.log(`Voto direto computado no cadastro.csv para a faixa: ${trackTitle}`);
-
-      const votes = getCalculatedVotes();
-      res.json({ success: true, votes });
-    } catch (err: any) {
-      console.error("Erro ao computar voto:", err);
-      res.status(500).json({ error: err.message });
+      console.error("Erro ao processar e enviar cadastro:", err);
+      res.status(500).json({ error: err.message || "Erro interno ao processar cadastro." });
     }
   });
 

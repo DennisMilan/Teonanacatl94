@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "fan": {
+      "title": "Fan",
+      "description": "A registered fan of the band",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Fan's full name"
+        },
+        "email": {
+          "type": "string",
+          "description": "Fan's email address"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Fan's phone/cellphone number"
+        },
+        "instagram": {
+          "type": "string",
+          "description": "Fan's Instagram handle"
+        },
+        "city": {
+          "type": "string",
+          "description": "Fan's city"
+        },
+        "favoriteTrack": {
+          "type": "string",
+          "description": "Fan's favorite track title"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Registration timestamp"
+        }
+      },
+      "required": ["name", "email", "createdAt"]
+    },
+    "vote": {
+      "title": "Vote",
+      "description": "A vote cast for a song",
+      "type": "object",
+      "properties": {
+        "fanId": {
+          "type": "string",
+          "description": "The Firestore ID of the fan who voted, or 'anonymous' for guest/direct votes"
+        },
+        "fanEmail": {
+          "type": "string",
+          "description": "The email of the fan, or 'anonymous' for guest/direct votes"
+        },
+        "trackTitle": {
+          "type": "string",
+          "description": "The title of the voted track"
+        },
+        "trackNumber": {
+          "type": "integer",
+          "description": "The sequential number of the track (1 to 16)"
+        },
+        "isAnonymous": {
+          "type": "boolean",
+          "description": "Whether the vote was cast without a fan profile"
+        },
+        "votedAt": {
+          "type": "string",
+          "description": "Voting timestamp"
+        }
+      },
+      "required": ["fanId", "fanEmail", "trackTitle", "trackNumber", "isAnonymous", "votedAt"]
+    }
+  },
+  "firestore": {
+    "/fans/{fanId}": {
+      "schema": "fan",
+      "description": "Collection of registered fans"
+    },
+    "/votes/{voteId}": {
+      "schema": "vote",
+      "description": "Collection of music votes"
+    }
+  }
+}
