@@ -268,7 +268,7 @@ export default function App() {
   // Music player states
   const [activeTrack, setActiveTrack] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [lyricsExpanded, setLyricsExpanded] = useState(false);
+  const [lyricsExpanded, setLyricsExpanded] = useState(true);
 
   // Real audio & Integrations states (iframe-based)
   const [playerTab, setPlayerTab] = useState<'soundcloud' | 'spotify'>('soundcloud');
@@ -1234,8 +1234,12 @@ Só quero viver minha vida, mas não consigo...`
             className="flex items-center space-x-2 text-left group cursor-pointer"
             id="logo-brand"
           >
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center border border-emerald-500/30 group-hover:border-pink-500/50 transition-colors">
-              <span className="font-orbitron text-emerald-400 group-hover:text-pink-400 font-black text-xs">94</span>
+            <div className="w-8 h-8 rounded-lg bg-zinc-950/40 flex items-center justify-center border border-zinc-800 group-hover:border-emerald-500/50 transition-all overflow-hidden p-0.5">
+              <img 
+                src="Teonanacatl 94 Logo.png" 
+                alt="Teonanacatl 94" 
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <span className="font-orbitron font-black text-white tracking-widest text-lg block group-hover:text-emerald-400 transition-colors">
@@ -1331,10 +1335,10 @@ Só quero viver minha vida, mas não consigo...`
         <div className="absolute inset-0 z-0">
           {!heroImgError ? (
             <img 
-              src="banda_para_youtube.png" 
+              src="Banda Teonanacatl94.png" 
               alt="Teonanacatl Retro concert"
               onError={() => setHeroImgError(true)}
-              className="w-full h-full object-cover object-center scale-100 opacity-60 filter brightness-70 contrast-125 saturate-75 transition-opacity"
+              className="w-full h-full object-cover object-center scale-100 opacity-50 filter brightness-70 contrast-125 saturate-75 transition-opacity"
             />
           ) : (
             /* Premium gradient styled as volcanic landscape + neon glows if image missing */
