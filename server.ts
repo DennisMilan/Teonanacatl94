@@ -8,6 +8,37 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Support dynamic CORS with credentials so HTML5 audio media player inside the iframe can securely read the assets
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && origin !== "null") {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    } else if (req.headers.referer) {
+      try {
+        const refUrl = new URL(req.headers.referer);
+        if (refUrl.origin && refUrl.origin !== "null") {
+          res.setHeader("Access-Control-Allow-Origin", refUrl.origin);
+          res.setHeader("Access-Control-Allow-Credentials", "true");
+        } else {
+          res.setHeader("Access-Control-Allow-Origin", "*");
+        }
+      } catch (e) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+      }
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Range");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Ensure 'Nanos' directory exists at the root
   const nanosDir = path.join(process.cwd(), "Nanos");
   if (!fs.existsSync(nanosDir)) {
@@ -255,6 +286,26 @@ async function startServer() {
     } catch (err: any) {
       console.error("Erro ao fazer download do deploy_godaddy.zip:", err);
       res.status(500).send("Erro interno ao servir o arquivo ZIP.");
+    }
+  });
+
+  // API endpoint for safe proxy-friendly audio streaming
+  app.get("/api/audio/:filename", (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const safeFilename = path.basename(filename);
+      const filePath = path.join(process.cwd(), "audio", safeFilename);
+      
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Accept-Ranges", "bytes");
+        res.sendFile(filePath);
+      } else {
+        res.status(404).json({ error: "Arquivo de áudio não encontrado." });
+      }
+    } catch (err: any) {
+      console.error("Erro ao servir áudio pela API:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 

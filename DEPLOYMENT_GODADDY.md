@@ -13,35 +13,28 @@ Certifique-se de que seu plano de hospedagem GoDaddy possui suporte para **Node.
 ## 🚀 Passo a Passo para Implantação
 
 ### Passo 1: Preparar os Arquivos para Upload
-Você tem duas opções para subir a sua aplicação:
 
-#### Opção A: Build Local (Recomendado - Mais rápido e evita consumo de CPU do servidor GoDaddy)
-1. No seu computador, rode o comando para compilar o projeto:
+Você pode implantar a aplicação de forma extremamente simples, pois o projeto está pré-configurado para instalar as dependências e compilar o build de produção automaticamente diretamente no servidor GoDaddy:
+
+#### Opção A: Deploy Prático (Recomendado - Build Automático no Servidor)
+1. Crie um arquivo **`.zip`** com todo o código-fonte da raiz do projeto, **excluindo** apenas a pasta `node_modules` (e a pasta `dist` se já existir), para manter o arquivo leve.
+2. Certifique-se de que o `.zip` contém:
+   - As pastas `src/`, `audio/`, `Nanos/`
+   - Os arquivos `package.json`, `app.js`, `server.ts`, `vite.config.ts`, `tsconfig.json`
+   - Os arquivos `.png` e `.jpg` da raiz (como as imagens da banda)
+3. Envie este arquivo `.zip` para a pasta destino na GoDaddy (via **Gerenciador de Arquivos** do cPanel ou por **FTP**) e extraia os arquivos.
+
+#### Opção B: Build Local (Caso prefira enviar os arquivos já compilados)
+1. No seu computador, execute o comando de compilação:
    ```bash
    npm run build
    ```
-2. Isso gerará as pastas e arquivos compilados:
-   - `dist/` (Contém o frontend compilado e o servidor backend empacotado `dist/server.cjs`)
-   - `audio/` (Contém as faixas de áudio otimizadas)
-   - Arquivos estáticos de imagem na raiz (ex: `banda_para_youtube.png`, `Teonanacatl 94.jpg`, `Teonanacatl 1994 (ReCovered) - Final.png`)
-3. Compacte os seguintes arquivos e pastas em um arquivo **`.zip`**:
-   - `dist/`
-   - `audio/`
-   - `Nanos/` (Onde fica o arquivo de cadastro de fãs `cadastro.csv`, se já houver registros)
-   - `app.js` (O arquivo de inicialização criado na raiz)
-   - `package.json`
-   - Arquivos `.png` e `.jpg` da raiz
-4. Suba este arquivo `.zip` para o diretório da sua aplicação na GoDaddy (através do **Gerenciador de Arquivos** do cPanel ou por **FTP**).
-5. Extraia o conteúdo na pasta destino (ex: `/home/usuario/teonanacatl-app`).
-
-#### Opção B: Build diretamente no Servidor GoDaddy (Necessário acesso SSH)
-1. Suba todo o código-fonte do projeto (exceto a pasta `node_modules`).
-2. Conecte-se por SSH ao seu servidor GoDaddy.
-3. Vá até a pasta do aplicativo e execute:
-   ```bash
-   npm install
-   npm run build
-   ```
+2. Compacte as seguintes pastas e arquivos compilados:
+   - As pastas `dist/` (contém o frontend e o servidor `dist/server.cjs`) e `audio/`
+   - A pasta `Nanos/` (com o arquivo `cadastro.csv`)
+   - Os arquivos `app.js` e `package.json`
+   - As imagens `.png` e `.jpg` da raiz do projeto
+3. Suba o arquivo `.zip` gerado para o servidor GoDaddy e extraia na pasta destino.
 
 ---
 

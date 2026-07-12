@@ -27,7 +27,8 @@ import {
   Check,
   Download,
   RefreshCw,
-  Database
+  Database,
+  AlertTriangle
 } from 'lucide-react';
 
 // Interfaces
@@ -75,6 +76,173 @@ function getSoundCloudEmbedUrl(url?: string): string | null {
   return null;
 }
 
+interface StandardizedEmbedPlayerProps {
+  track: Track;
+  isPlaying: boolean;
+  setIsPlaying: (playing: boolean) => void;
+  nextTrack: () => void;
+  prevTrack: () => void;
+}
+
+function StandardizedEmbedPlayer({ track, isPlaying, setIsPlaying, nextTrack, prevTrack }: StandardizedEmbedPlayerProps) {
+  const soundCloudEmbedUrl = getSoundCloudEmbedUrl(track.soundcloudUrl);
+  const spotifyEmbedUrl = getSpotifyEmbedUrl(track.spotifyUrl);
+
+  const [activePlatform, setActivePlatform] = useState<'soundcloud' | 'spotify'>(
+    soundCloudEmbedUrl ? 'soundcloud' : 'spotify'
+  );
+
+  // Automatically update the platform when the track changes if the current one isn't supported
+  useEffect(() => {
+    if (activePlatform === 'spotify' && !spotifyEmbedUrl && soundCloudEmbedUrl) {
+      setActivePlatform('soundcloud');
+    } else if (activePlatform === 'soundcloud' && !soundCloudEmbedUrl && spotifyEmbedUrl) {
+      setActivePlatform('spotify');
+    }
+  }, [track, spotifyEmbedUrl, soundCloudEmbedUrl]);
+
+  return (
+    <div className="bg-[#07070a] border border-zinc-900 rounded-xl p-5 space-y-4 relative overflow-hidden shadow-2xl">
+      {/* Visual scanning line */}
+      <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent animate-pulse" />
+
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-zinc-900/85 pb-3">
+        {/* Platform selection tabs */}
+        <div className="flex gap-1 text-[10px] font-mono tracking-widest uppercase select-none">
+          {soundCloudEmbedUrl && (
+            <button
+              onClick={() => setActivePlatform('soundcloud')}
+              className={`px-3 py-1.5 border rounded-lg transition-all font-bold flex items-center space-x-1.5 cursor-pointer ${
+                activePlatform === 'soundcloud'
+                  ? 'border-emerald-500/40 text-[#FF5500] bg-[#FF5500]/5 shadow-[0_0_10px_rgba(255,85,0,0.1)]'
+                  : 'border-zinc-900 text-zinc-500 hover:text-zinc-300 hover:border-zinc-800'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500]" />
+              <span>SOUNDCLOUD</span>
+            </button>
+          )}
+          {spotifyEmbedUrl && (
+            <button
+              onClick={() => setActivePlatform('spotify')}
+              className={`px-3 py-1.5 border rounded-lg transition-all font-bold flex items-center space-x-1.5 cursor-pointer ${
+                activePlatform === 'spotify'
+                  ? 'border-emerald-500/40 text-[#1DB954] bg-[#1DB954]/5 shadow-[0_0_10px_rgba(29,185,84,0.1)]'
+                  : 'border-zinc-900 text-zinc-500 hover:text-zinc-300 hover:border-zinc-800'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954]" />
+              <span>SPOTIFY</span>
+            </button>
+          )}
+        </div>
+
+        {/* Status indicator */}
+        <div className="flex items-center space-x-2 text-[10px] font-mono text-zinc-500">
+          <span className="flex h-2 w-2 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="uppercase tracking-wider">MODO_EMBED_SEGURO</span>
+        </div>
+      </div>
+
+      {/* Embedded iframe container */}
+      <div className="relative w-full rounded-xl overflow-hidden border border-zinc-900 shadow-inner bg-black/60 p-1">
+        {activePlatform === 'soundcloud' && soundCloudEmbedUrl ? (
+          <div className="h-[166px] w-full transition-all duration-300">
+            <iframe
+              src={soundCloudEmbedUrl}
+              width="100%"
+              height="166"
+              scrolling="no"
+              frameBorder="no"
+              allow="autoplay"
+              className="border-0 rounded-lg"
+              title={`${track.title} on SoundCloud`}
+            />
+          </div>
+        ) : activePlatform === 'spotify' && spotifyEmbedUrl ? (
+          <div className="h-[80px] w-full transition-all duration-300 py-1">
+            <iframe
+              src={spotifyEmbedUrl}
+              width="100%"
+              height="80"
+              allowFullScreen={false}
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+              className="border-0 rounded-lg"
+              title={`${track.title} on Spotify`}
+            />
+          </div>
+        ) : (
+          <div className="p-8 text-center text-zinc-500 text-xs font-mono flex flex-col items-center justify-center space-y-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500 animate-pulse" />
+            <span>Nenhum reprodutor disponível para esta faixa.</span>
+          </div>
+        )}
+      </div>
+
+      {/* Playlist Navigation and Decorative visualizer panel */}
+      <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* Prev / Next buttons */}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={prevTrack}
+            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-all focus:outline-none cursor-pointer"
+            title="Faixa anterior"
+          >
+            <SkipBack className="w-4 h-4" />
+          </button>
+          
+          <div className="text-[10px] font-mono text-zinc-500 px-2 uppercase tracking-widest bg-zinc-900/50 py-1 rounded border border-zinc-850 font-bold">
+            {track.bpm}
+          </div>
+
+          <button
+            onClick={nextTrack}
+            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-all focus:outline-none cursor-pointer"
+            title="Próxima faixa"
+          >
+            <SkipForward className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Dynamic visual spectrum analyzer decorative simulator */}
+        <div className="h-6 flex items-center justify-between gap-[2px] select-none flex-1 max-w-[200px] sm:max-w-none px-4">
+          {[...Array(24)].map((_, index) => {
+            const runningHeight = 4 + Math.sin(index * 0.5) * 12 + (isPlaying ? Math.sin(Date.now() * 0.05 + index) * 6 : 0);
+            return (
+              <div
+                key={index}
+                className={`w-px flex-1 rounded-sm transition-all duration-300 ${
+                  isPlaying ? 'bg-emerald-400/80 animate-pulse' : 'bg-zinc-800'
+                }`}
+                style={{
+                  height: `${isPlaying ? Math.max(3, Math.min(22, runningHeight)) : 3}px`,
+                  opacity: isPlaying ? 0.4 + (index % 4) * 0.15 : 0.2
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* Interaction trigger */}
+        <button
+          onClick={() => setIsPlaying(!isPlaying)}
+          className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono tracking-wider transition-all cursor-pointer select-none ${
+            isPlaying 
+              ? 'border-pink-500/30 text-pink-400 bg-pink-500/5 hover:bg-pink-500/10'
+              : 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10'
+          }`}
+        >
+          {isPlaying ? '👁️ VISUAL: ATIVO' : '👁️ VISUAL: PARADO'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const ddiList = [
   { code: 'BR', name: 'Brasil', ddi: '+55' },
   { code: 'US', name: 'EUA/Canadá', ddi: '+1' },
@@ -100,15 +268,11 @@ export default function App() {
   // Music player states
   const [activeTrack, setActiveTrack] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(80);
-  const [isMuted, setIsMuted] = useState(false);
   const [lyricsExpanded, setLyricsExpanded] = useState(false);
 
-  // Real audio & Integrations states
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [trackDuration, setTrackDuration] = useState(210);
-  const [playerTab, setPlayerTab] = useState<'retro' | 'spotify' | 'soundcloud'>('retro');
+  // Real audio & Integrations states (iframe-based)
+  const [playerTab, setPlayerTab] = useState<'soundcloud' | 'spotify'>('soundcloud');
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
 
   // Nano interaction states
   const [activeNanoPhrase, setActiveNanoPhrase] = useState("Clique nas frequências abaixo para ecoar o registro...");
@@ -269,90 +433,33 @@ export default function App() {
     }
   };
 
-  // Control HTML5 audio element source
+  // Robust, cookie-safe direct relative-path audio synchronization with native media events
+  const togglePlay = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  const selectTrack = (index: number) => {
+    setActiveTrack(index);
+    setIsPlaying(true);
+  };
+
+  const nextTrack = () => {
+    const nextIndex = activeTrack < tracks.length - 1 ? activeTrack + 1 : 0;
+    selectTrack(nextIndex);
+  };
+
+  const prevTrack = () => {
+    const prevIndex = activeTrack > 0 ? activeTrack - 1 : tracks.length - 1;
+    selectTrack(prevIndex);
+  };
+
+  // Handle source-specific tab auto-switching
   useEffect(() => {
-    if (audioRef.current) {
-      const currentTrack = tracks[activeTrack];
-      if (currentTrack.audioUrl) {
-        audioRef.current.src = currentTrack.audioUrl;
-        audioRef.current.volume = isMuted ? 0 : volume / 100;
-        audioRef.current.load();
-        if (isPlaying) {
-          audioRef.current.play().catch(err => {
-            console.log("Audio play failed on track change:", err);
-            setIsPlaying(false);
-          });
-        }
-      } else {
-        audioRef.current.pause();
-      }
-    }
-    // Auto switch players when active track changes if a player is not available
     const currentTrack = tracks[activeTrack];
     if (playerTab === 'spotify' && !currentTrack.spotifyUrl) {
-      setPlayerTab('retro');
-    } else if (playerTab === 'soundcloud' && !currentTrack.soundcloudUrl) {
-      setPlayerTab('retro');
+      setPlayerTab('soundcloud');
     }
-  }, [activeTrack]);
-
-  // Handle play/pause sync for HTML5 audio
-  useEffect(() => {
-    if (audioRef.current && tracks[activeTrack].audioUrl) {
-      if (isPlaying) {
-        audioRef.current.play().catch(err => {
-          console.log("Audio play failed:", err);
-          setIsPlaying(false);
-        });
-      } else {
-        audioRef.current.pause();
-      }
-    }
-  }, [isPlaying]);
-
-  // Handle volume & mute changes
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume / 100;
-    }
-  }, [volume, isMuted]);
-
-  // Simulated timer fallback
-  useEffect(() => {
-    let interval: any = null;
-    if (isPlaying && !tracks[activeTrack].audioUrl) {
-      interval = setInterval(() => {
-        setCurrentTime((prev) => {
-          if (prev >= 210) { // simulate 3:30 max time
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying, activeTrack]);
-
-  // Event handlers for real HTML5 audio playback
-  const handleTimeUpdate = () => {
-    if (audioRef.current && tracks[activeTrack].audioUrl) {
-      setCurrentTime(Math.floor(audioRef.current.currentTime));
-    }
-  };
-
-  const handleLoadedMetadata = () => {
-    if (audioRef.current && tracks[activeTrack].audioUrl) {
-      setTrackDuration(Math.floor(audioRef.current.duration) || 210);
-    }
-  };
-
-  const handleAudioEnded = () => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  };
+  }, [activeTrack, playerTab]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1805,16 +1912,15 @@ Só quero viver minha vida, mas não consigo...`
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             
             {/* LEFT COLUMN: Tracklist (16 tracks list) */}
-            <div className="lg:col-span-5 flex flex-col max-h-[640px] overflow-y-auto bg-zinc-950/70 rounded-2xl border border-zinc-900 p-4 space-y-1.5 scrollbar-thin">
+            <div className="lg:col-span-5 flex flex-col bg-zinc-950/70 rounded-2xl border border-zinc-900 p-4 space-y-1.5">
               <span className="text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-500 block px-2 mb-2">SELECIONE UMA FAIXA PARA DECRIPTAR</span>
               
               {tracks.map((track, i) => (
                 <button
                   key={i}
                   onClick={() => {
-                    setActiveTrack(i);
-                    setIsPlaying(false);
-                    setCurrentTime(0);
+                    selectTrack(i);
+                    setPlayerTab('soundcloud');
                   }}
                   className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-left transition-all duration-250 cursor-pointer ${
                     activeTrack === i 
@@ -1838,7 +1944,9 @@ Só quero viver minha vida, mas não consigo...`
                     <span className="font-mono text-[9px] text-zinc-500 whitespace-nowrap hidden sm:block">
                       {track.bpm}
                     </span>
-                    {activeTrack === i && isPlaying ? (
+                    {activeTrack === i && isAudioLoading ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    ) : activeTrack === i && isPlaying ? (
                       <div className="flex items-center space-x-0.5">
                         <span className="w-1 h-3 bg-emerald-400 animate-pulse inline-block"></span>
                         <span className="w-1 h-5 bg-emerald-400 animate-pulse delay-75 inline-block"></span>
@@ -1899,186 +2007,14 @@ Só quero viver minha vida, mas não consigo...`
                   </p>
                 </div>
 
-                {/* Embedded HTML5 Audio Tag (Invisível) */}
-                <audio 
-                  ref={audioRef} 
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onEnded={handleAudioEnded}
+                {/* Standardized Iframe Embed Player Container */}
+                <StandardizedEmbedPlayer 
+                  track={tracks[activeTrack]}
+                  isPlaying={isPlaying}
+                  setIsPlaying={setIsPlaying}
+                  nextTrack={nextTrack}
+                  prevTrack={prevTrack}
                 />
-
-                {/* Player source tabs */}
-                {(tracks[activeTrack].spotifyUrl || tracks[activeTrack].soundcloudUrl) && (
-                  <div className="flex border-b border-zinc-900/80 gap-1 text-[10px] font-mono tracking-widest uppercase select-none mb-1">
-                    <button
-                      onClick={() => setPlayerTab('retro')}
-                      className={`px-3.5 py-2 border-b-2 transition-all font-bold cursor-pointer ${
-                        playerTab === 'retro' 
-                          ? 'border-emerald-500 text-emerald-400 bg-emerald-500/5' 
-                          : 'border-transparent text-zinc-500 hover:text-zinc-300'
-                      }`}
-                    >
-                      📟 Simulador Retrô (432Hz)
-                    </button>
-                    {tracks[activeTrack].spotifyUrl && (
-                      <button
-                        onClick={() => setPlayerTab('spotify')}
-                        className={`px-3.5 py-2 border-b-2 transition-all font-bold cursor-pointer ${
-                          playerTab === 'spotify' 
-                            ? 'border-emerald-500 text-[#1DB954] bg-[#1DB954]/5' 
-                            : 'border-transparent text-zinc-500 hover:text-zinc-300'
-                        }`}
-                      >
-                        🟢 Spotify Tab
-                      </button>
-                    )}
-                    {tracks[activeTrack].soundcloudUrl && (
-                      <button
-                        onClick={() => setPlayerTab('soundcloud')}
-                        className={`px-3.5 py-2 border-b-2 transition-all font-bold cursor-pointer ${
-                          playerTab === 'soundcloud' 
-                            ? 'border-emerald-500 text-[#FF5500] bg-[#FF5500]/5' 
-                            : 'border-transparent text-zinc-500 hover:text-zinc-300'
-                        }`}
-                      >
-                        🟠 SoundCloud Tab
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Simulated Waveform & Control deck */}
-                <div className="bg-[#07070a] border border-zinc-900 rounded-xl p-4 space-y-4 relative">
-                  {playerTab === 'spotify' && getSpotifyEmbedUrl(tracks[activeTrack].spotifyUrl) ? (
-                    <div className="w-full h-[80px] bg-black/50 rounded-lg overflow-hidden border border-emerald-500/20 shadow-inner flex items-center justify-center animate-fadeIn">
-                      <iframe
-                        src={getSpotifyEmbedUrl(tracks[activeTrack].spotifyUrl)!}
-                        width="100%"
-                        height="80"
-                        allowFullScreen={false}
-                        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                        loading="lazy"
-                        className="border-0"
-                      />
-                    </div>
-                  ) : playerTab === 'soundcloud' && getSoundCloudEmbedUrl(tracks[activeTrack].soundcloudUrl) ? (
-                    <div className="w-full h-[166px] bg-black/50 rounded-lg overflow-hidden border border-emerald-500/20 shadow-inner flex items-center justify-center animate-fadeIn">
-                      <iframe
-                        src={getSoundCloudEmbedUrl(tracks[activeTrack].soundcloudUrl)!}
-                        width="100%"
-                        height="166"
-                        scrolling="no"
-                        frameBorder="no"
-                        allow="autoplay"
-                        className="border-0"
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      {/* Dynamic sound wave simulator when playing */}
-                      <div className="h-10 flex items-center justify-between px-2 gap-[3px] select-none">
-                        {[...Array(40)].map((_, index) => {
-                          const baseHeight = 10 + Math.sin(index * 0.4) * 15;
-                          const runningHeight = isPlaying 
-                            ? Math.max(4, baseHeight + (Math.sin(currentTime * 2 + index) * 20)) 
-                            : 3;
-                          return (
-                            <div
-                              key={index}
-                              className={`w-px flex-1 rounded-sm transition-all duration-300 ${
-                                isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-805'
-                              }`}
-                              style={{
-                                height: isPlaying ? `${Math.min(38, runningHeight)}px` : '4px',
-                                opacity: isPlaying ? 0.4 + (index % 3) * 0.2 : 0.25
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-
-                      {/* Seek and controls bar */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-mono text-zinc-500">
-                          <span>{formatTime(currentTime)}</span>
-                          <div 
-                            className="w-full mx-4 h-1 bg-zinc-900 rounded-full relative cursor-pointer" 
-                            onClick={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const percent = (e.clientX - rect.left) / rect.width;
-                              const currentDuration = tracks[activeTrack].audioUrl ? trackDuration : 210;
-                              const newTime = Math.floor(percent * currentDuration);
-                              setCurrentTime(newTime);
-                              if (audioRef.current && tracks[activeTrack].audioUrl) {
-                                audioRef.current.currentTime = newTime;
-                              }
-                            }}
-                          >
-                            <div 
-                              className="absolute h-full left-0 top-0 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" 
-                              style={{ 
-                                width: `${(currentTime / (tracks[activeTrack].audioUrl ? trackDuration : 210)) * 100}%` 
-                              }}
-                            />
-                          </div>
-                          <span>{formatTime(tracks[activeTrack].audioUrl ? trackDuration : 210)}</span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          {/* Previous track */}
-                          <button 
-                            onClick={() => {
-                              setActiveTrack(prev => prev > 0 ? prev - 1 : tracks.length - 1);
-                              setIsPlaying(false);
-                              setCurrentTime(0);
-                            }}
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-all focus:outline-none cursor-pointer"
-                            title="Faixa anterior"
-                          >
-                            <SkipBack className="w-5 h-5" />
-                          </button>
-
-                          {/* PLAY PAUSE CENTRAL */}
-                          <button 
-                            onClick={() => setIsPlaying(!isPlaying)}
-                            className={`p-3.5 rounded-full border shadow-lg transition-all transform hover:scale-105 select-none cursor-pointer ${
-                              isPlaying 
-                                ? 'bg-pink-600 border-pink-500 text-white hover:bg-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.3)]' 
-                                : 'bg-emerald-500 border-emerald-400 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                            }`}
-                            title={isPlaying ? 'Pausar' : tracks[activeTrack].audioUrl ? 'Tocar música original' : 'Ouvir demonstração'}
-                            id="play-pause-deck-btn"
-                          >
-                            {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-black" />}
-                          </button>
-
-                          {/* Next track */}
-                          <button 
-                            onClick={() => {
-                              setActiveTrack(prev => prev < tracks.length - 1 ? prev + 1 : 0);
-                              setIsPlaying(false);
-                              setCurrentTime(0);
-                            }}
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-all focus:outline-none cursor-pointer"
-                            title="Próxima faixa"
-                          >
-                            <SkipForward className="w-5 h-5" />
-                          </button>
-
-                          {/* Quick mute indicator toggle */}
-                          <button
-                            onClick={() => setIsMuted(!isMuted)}
-                            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-all focus:outline-none cursor-pointer"
-                            title={isMuted ? 'Desmutar' : 'Mutar'}
-                          >
-                            {isMuted ? <VolumeX className="w-5 h-5 text-zinc-500" /> : <Volume2 className="w-5 h-5 text-emerald-400" />}
-                          </button>
-                        </div>
-
-                      </div>
-                    </>
-                  )}
-                </div>
 
               </div>
 
