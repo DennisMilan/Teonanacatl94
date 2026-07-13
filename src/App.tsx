@@ -291,6 +291,8 @@ export default function App() {
   const [fanDdi, setFanDdi] = useState('+55');
   const [fanPhone, setFanPhone] = useState('');
   const [fanInstagram, setFanInstagram] = useState('');
+  const [fanTiktok, setFanTiktok] = useState('');
+  const [fanAge, setFanAge] = useState('');
   const [fanCountry, setFanCountry] = useState('Brasil');
   const [fanState, setFanState] = useState('');
   const [fanCity, setFanCity] = useState('');
@@ -301,7 +303,7 @@ export default function App() {
 
   const handleRegisterFan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fanName || !fanEmail || !fanCountry || !fanState || !fanCity) return;
+    if (!fanName || !fanEmail || !fanCountry || !fanState || !fanCity || !fanAge) return;
 
     setIsSubmittingFan(true);
     setFanSubmitStatus('idle');
@@ -311,12 +313,14 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
+         },
         body: JSON.stringify({
           name: fanName,
           email: fanEmail,
           phone: fanPhone ? `${fanDdi} ${fanPhone}` : '',
           instagram: fanInstagram,
+          tiktok: fanTiktok,
+          age: fanAge,
           country: fanCountry,
           state: fanState,
           city: fanCity,
@@ -333,6 +337,8 @@ export default function App() {
         setFanDdi('+55');
         setFanPhone('');
         setFanInstagram('');
+        setFanTiktok('');
+        setFanAge('');
         setFanCountry('Brasil');
         setFanState('');
         setFanCity('');
@@ -2094,6 +2100,32 @@ Só quero viver minha vida, mas não consigo...`
                         value={fanInstagram}
                         onChange={(e) => setFanInstagram(e.target.value)}
                         placeholder="@seu_perfil"
+                        className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">TikTok</label>
+                      <input 
+                        type="text" 
+                        value={fanTiktok}
+                        onChange={(e) => setFanTiktok(e.target.value)}
+                        placeholder="@seu_tiktok"
+                        className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Idade *</label>
+                      <input 
+                        type="number" 
+                        required
+                        min="1"
+                        max="120"
+                        value={fanAge}
+                        onChange={(e) => setFanAge(e.target.value)}
+                        placeholder="Ex: 25"
                         className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-500/60 rounded-lg px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all font-sans"
                       />
                     </div>

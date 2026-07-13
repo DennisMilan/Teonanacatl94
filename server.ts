@@ -93,21 +93,21 @@ async function startServer() {
   // Simplified fan registration (No Database, sends CSV email attachment)
   app.post("/api/fans/register", async (req, res) => {
     try {
-      const { name, email, phone, instagram, country, state, city, favoriteTrack, message } = req.body;
+      const { name, email, phone, instagram, tiktok, age, country, state, city, favoriteTrack, message } = req.body;
       
-      if (!name || !email || !country || !state || !city) {
-        return res.status(400).json({ error: "Nome, Email, País, Estado e Cidade são obrigatórios." });
+      if (!name || !email || !country || !state || !city || !age) {
+        return res.status(400).json({ error: "Nome, Email, Idade, País, Estado e Cidade são obrigatórios." });
       }
 
       const timestamp = getTimestamp();
 
       // Create CSV Attachment
-      const sanitize = (val: string) => `"${(val || "").replace(/"/g, '""')}"`;
-      const csvHeader = `"Data/Hora","Nome","Email","Celular","Instagram","País","Estado","Cidade","Música Favorita","Mensagem"\n`;
-      const csvLine = `${sanitize(timestamp)},${sanitize(name)},${sanitize(email)},${sanitize(phone || "")},${sanitize(instagram || "")},${sanitize(country)},${sanitize(state)},${sanitize(city)},${sanitize(favoriteTrack || "")},${sanitize(message || "")}\n`;
+      const sanitize = (val: string | number) => `"${(String(val || "")).replace(/"/g, '""')}"`;
+      const csvHeader = `"Data/Hora","Nome","Email","Celular","Instagram","TikTok","Idade","País","Estado","Cidade","Música Favorita","Mensagem"\n`;
+      const csvLine = `${sanitize(timestamp)},${sanitize(name)},${sanitize(email)},${sanitize(phone || "")},${sanitize(instagram || "")},${sanitize(tiktok || "")},${sanitize(age)},${sanitize(country)},${sanitize(state)},${sanitize(city)},${sanitize(favoriteTrack || "")},${sanitize(message || "")}\n`;
       const csvContent = "\ufeff" + csvHeader + csvLine;
 
-      console.log(`[NOVO CADASTRO] Nome: ${name}, Email: ${email}, País: ${country}, Estado: ${state}, Cidade: ${city}, Música: ${favoriteTrack}`);
+      console.log(`[NOVO CADASTRO] Nome: ${name}, Email: ${email}, Idade: ${age}, TikTok: ${tiktok}, País: ${country}, Estado: ${state}, Cidade: ${city}, Música: ${favoriteTrack}`);
 
       // Setup email payload for the band
       const mailOptions = {
@@ -117,8 +117,10 @@ async function startServer() {
         text: `Olá!\n\nUm novo fã se cadastrou no site oficial da banda Teonanacatl 94:\n\n` +
               `- Nome: ${name}\n` +
               `- Email: ${email}\n` +
+              `- Idade: ${age} anos\n` +
               `- Celular/WhatsApp: ${phone || "Não informado"}\n` +
               `- Instagram: ${instagram || "Não informado"}\n` +
+              `- TikTok: ${tiktok || "Não informado"}\n` +
               `- País: ${country}\n` +
               `- Estado: ${state}\n` +
               `- Cidade: ${city}\n` +
@@ -140,12 +142,20 @@ async function startServer() {
                 <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${email}</td>
               </tr>
               <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Idade:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${age} anos</td>
+              </tr>
+              <tr>
                 <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Celular/WhatsApp:</td>
                 <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${phone || "Não informado"}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">Instagram:</td>
                 <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${instagram || "Não informado"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">TikTok:</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">${tiktok || "Não informado"}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #f0f0f0;">País:</td>
@@ -182,7 +192,7 @@ async function startServer() {
         ]
       };
 
-      // Setup thank you email to the fan
+      // Setup thank you email to the fan with embedded logo and social media links
       const thankYouMailOptions = {
         from: process.env.EMAIL_FROM || '"Teonanacatl 94" <no-reply@teonanacatl94.com>',
         to: email,
@@ -191,30 +201,60 @@ async function startServer() {
               `Agradecemos muito por se cadastrar no site oficial da banda Teonanacatl 94 e entrar para o nosso Clã!\n\n` +
               `Recebemos suas informações e sua mensagem. É uma honra ter você conosco vibrando na mesma frequência.\n\n` +
               `Sua música favorita selecionada: ${favoriteTrack || "Não informada"}\n\n` +
-              `Fique ligado em nosso site para novidades, datas de shows e lançamentos futuros!\n\n` +
+              `Acesse nosso site: https://www.teonanacatl94.com.br\n` +
+              `Siga-nos no Instagram: https://www.instagram.com/teonanacatl94/\n` +
+              `Siga-nos no YouTube: https://www.youtube.com/@Teonanacatl94\n\n` +
               `Abraços,\nBanda Teonanacatl 94`,
         html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px; background-color: #0c0c0e; color: #f4f4f5;">
-            <div style="text-align: center; margin-bottom: 20px;">
-              <h1 style="color: #10b981; font-size: 24px; margin-bottom: 5px; font-family: sans-serif; letter-spacing: 2px;">TEONANACATL 94</h1>
-              <p style="color: #a1a1aa; font-size: 14px; margin: 0;">O Clã dos Cyber-Fãs</p>
-            </div>
-            <div style="border-top: 1px solid #27272a; padding-top: 20px;">
-              <p style="color: #ffffff;">Olá, <strong>${name}</strong>!</p>
-              <p style="color: #d4d4d8; line-height: 1.6;">É uma honra dar as boas-vindas a você no nosso círculo oficial de apoiadores, o <strong>TeonanaClã</strong>!</p>
-              <p style="color: #d4d4d8; line-height: 1.6;">Sua mensagem e seus dados de cadastro foram entregues diretamente à banda. Agradecemos muito por compartilhar seu apoio conosco.</p>
-              <div style="background-color: #18181b; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0; border-radius: 4px;">
-                <span style="color: #a1a1aa; font-size: 12px; display: block; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">Sua Música Favorita:</span>
-                <strong style="color: #ffffff; font-size: 15px;">${favoriteTrack || "Não informada"}</strong>
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #1f1f22; border-radius: 12px; background-color: #0c0c0e; color: #f4f4f5; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+            <div style="text-align: center; margin-bottom: 25px; border-bottom: 1px solid #1f1f22; padding-bottom: 20px;">
+              <div style="margin-bottom: 10px;">
+                <img src="cid:logo" alt="Teonanacatl 94 Logo" style="max-width: 180px; height: auto;" />
               </div>
-              <p style="color: #d4d4d8; line-height: 1.6;">Prepare-se para receber atualizações exclusivas sobre novos lançamentos digitais, fita cassete, remasters de 2026 e as próximas apresentações na estrada.</p>
-              <p style="margin-top: 30px; border-top: 1px solid #27272a; padding-top: 15px; font-size: 13px; color: #a1a1aa; line-height: 1.5;">
-                Siga as nossas redes e continue escutando o álbum!<br><br>
+              <h1 style="color: #10b981; font-size: 22px; margin: 10px 0 5px 0; font-family: 'Courier New', Courier, monospace; letter-spacing: 3px; font-weight: bold;">TEONANACATL 94</h1>
+              <p style="color: #a1a1aa; font-size: 13px; margin: 0; text-transform: uppercase; letter-spacing: 1.5px;">O Clã dos Cyber-Fãs</p>
+            </div>
+            <div style="padding: 10px 5px;">
+              <p style="color: #ffffff; font-size: 16px; margin-bottom: 15px;">Olá, <strong>${name}</strong>!</p>
+              <p style="color: #d4d4d8; line-height: 1.6; font-size: 14px;">É uma honra dar as boas-vindas a você no nosso círculo oficial de apoiadores, o <strong>TeonanaClã</strong>!</p>
+              <p style="color: #d4d4d8; line-height: 1.6; font-size: 14px;">Sua mensagem e seus dados de cadastro foram entregues diretamente à banda. Agradecemos muito por compartilhar seu apoio conosco.</p>
+              
+              <div style="background-color: #18181b; padding: 15px; border-left: 4px solid #10b981; margin: 25px 0; border-radius: 6px; border: 1px solid #27272a;">
+                <span style="color: #a1a1aa; font-size: 11px; display: block; margin-bottom: 5px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; font-family: monospace;">Sua Música Favorita:</span>
+                <strong style="color: #10b981; font-size: 16px; font-family: 'Courier New', Courier, monospace;">${favoriteTrack || "Não informada"}</strong>
+              </div>
+              
+              <p style="color: #d4d4d8; line-height: 1.6; font-size: 14px;">Prepare-se para receber atualizações exclusivas sobre novos lançamentos digitais, fita cassete, remasters de 2026 e as próximas apresentações na estrada.</p>
+              
+              <div style="margin-top: 35px; border-top: 1px solid #1f1f22; padding-top: 20px; text-align: center;">
+                <p style="font-size: 13px; color: #a1a1aa; margin-bottom: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Conecte-se Conosco:</p>
+                <div style="margin: 15px 0;">
+                  <a href="https://www.teonanacatl94.com.br" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #10b981; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #10b981;">
+                    🌐 SITE OFICIAL
+                  </a>
+                  <a href="https://www.instagram.com/teonanacatl94/" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #ec4899; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #ec4899;">
+                    📸 INSTAGRAM
+                  </a>
+                  <a href="https://www.youtube.com/@Teonanacatl94" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #ef4444; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #ef4444;">
+                    📺 YOUTUBE
+                  </a>
+                </div>
+              </div>
+
+              <p style="margin-top: 30px; border-top: 1px solid #1f1f22; padding-top: 15px; font-size: 13px; color: #a1a1aa; line-height: 1.5; text-align: center;">
+                Continue escutando o álbum e vibrando nas frequências analógicas!<br><br>
                 <strong>Banda Teonanacatl 94</strong>
               </p>
             </div>
           </div>
-        `
+        `,
+        attachments: [
+          {
+            filename: 'Teonanacatl 94 Logo.png',
+            path: path.join(process.cwd(), 'Teonanacatl 94 Logo.png'),
+            cid: 'logo'
+          }
+        ]
       };
 
       const mailTransporter = getMailTransporter();
