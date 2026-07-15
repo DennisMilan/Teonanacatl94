@@ -845,7 +845,7 @@ In the hell`
       genre: "Pop Rock luminoso sobre recomeços",
       meta: "TRACK_12 // REF: DAO-12 // EQ_BOOST: MID_HIGH // STAGE: STEREO // LEVEL: MAXIMUM",
       notes: "'Dia Após o Outro' transforma o fim de uma relação em uma narrativa de reconstrução emocional. Mesmo partindo da dor e da desilusão, a música evolui para uma mensagem otimista sobre recomeços e autoconhecimento. O refrão luminoso, aliado à sonoridade energética do pop rock, cria um equilíbrio perfeito entre melancolia e esperança. É uma faixa extremamente acessível, com potencial de conexão imediata com o público por sua sinceridade e sensação de renovação.",
-      soundcloudUrl: "https://soundcloud.com/teonanacatl94/dia-apos-o-outro-recovered-12", // Cole o link do SoundCloud aqui
+      soundcloudUrl: "https://soundcloud.com/teonanacatl94/dia-apos-o-outro-recovered", // Cole o link do SoundCloud aqui
       audioUrl: "/audio/dia_apos_o_outro_recovered.mp3", // Se possuir o arquivo de áudio direto, coloque o caminho ou link dele aqui
       lyrics: `Quem dera se não ja existisse
 O que de você ficou em mim
@@ -1847,6 +1847,13 @@ Só quero viver minha vida, mas não consigo...`
                   onClick={() => {
                     selectTrack(i);
                     setPlayerTab('soundcloud');
+                    // Scroll to the beginning of the music details section
+                    setTimeout(() => {
+                      const element = document.getElementById('music-details-deck');
+                      if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }, 100);
                   }}
                   className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-left transition-all duration-250 cursor-pointer ${
                     activeTrack === i 
@@ -1887,7 +1894,7 @@ Só quero viver minha vida, mas não consigo...`
             </div>
 
             {/* RIGHT COLUMN: Audio Deck visualizer, Notes and COMPLETE LYRICS */}
-            <div className="lg:col-span-7 flex flex-col justify-between bg-zinc-950 rounded-2xl border border-zinc-900 p-6 shadow-2xl space-y-6 relative overflow-hidden">
+            <div id="music-details-deck" className="scroll-mt-24 lg:col-span-7 flex flex-col justify-between bg-zinc-950 rounded-2xl border border-zinc-900 p-6 shadow-2xl space-y-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/2 rounded-full blur-3xl pointer-events-none"></div>
               
               {/* Dynamic player block */}
@@ -1896,7 +1903,7 @@ Só quero viver minha vida, mas não consigo...`
                 {/* Active song metadata */}
                 <div className="flex flex-col sm:flex-row justify-between items-start md:items-center border-b border-zinc-900 pb-4">
                   <div>
-                    <div className="inline-flex items-center space-x-1 px-2.5 py-0.5 bg-zinc-900 text-emerald-400 rounded-md text-[9px] font-mono tracking-widest uppercase mb-1.5">
+                    <div id="decrypting-now-label" className="inline-flex items-center space-x-1 px-2.5 py-0.5 bg-zinc-900 text-emerald-400 rounded-md text-[9px] font-mono tracking-widest uppercase mb-1.5">
                       <span>DECRYPTING NOW</span>
                     </div>
                     <h3 className="font-orbitron font-black text-2xl tracking-wide text-white uppercase flex items-center space-x-2">
@@ -1925,14 +1932,6 @@ Só quero viver minha vida, mas não consigo...`
                   </code>
                 </div>
 
-                {/* Band Notes block in Portuguese */}
-                <div className="space-y-3 bg-zinc-900/40 p-5 rounded-xl border border-zinc-900">
-                  <span className="font-orbitron text-xs text-[#E6AF2E] font-bold block uppercase tracking-widest">// NOTAS DA BANDA (1994 & HOJE)</span>
-                  <p className="text-sm text-zinc-300 leading-relaxed italic">
-                    "{tracks[activeTrack].notes}"
-                  </p>
-                </div>
-
                 {/* Standardized Iframe Embed Player Container */}
                 <StandardizedEmbedPlayer 
                   track={tracks[activeTrack]}
@@ -1941,6 +1940,14 @@ Só quero viver minha vida, mas não consigo...`
                   nextTrack={nextTrack}
                   prevTrack={prevTrack}
                 />
+
+                {/* Band Notes block in Portuguese */}
+                <div className="space-y-3 bg-zinc-900/40 p-5 rounded-xl border border-zinc-900">
+                  <span className="font-orbitron text-xs text-[#E6AF2E] font-bold block uppercase tracking-widest">// NOTAS DA BANDA (1994 & HOJE)</span>
+                  <p className="text-sm text-zinc-300 leading-relaxed italic">
+                    "{tracks[activeTrack].notes}"
+                  </p>
+                </div>
 
               </div>
 
