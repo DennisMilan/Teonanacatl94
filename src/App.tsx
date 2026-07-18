@@ -8,6 +8,7 @@ import {
   VolumeX, 
   Instagram, 
   Youtube, 
+  Facebook, 
   Mail, 
   Calendar, 
   ExternalLink, 
@@ -1670,6 +1671,9 @@ Só quero viver minha vida, mas não consigo...`
               <a href="https://www.instagram.com/teonanacatl94/" target="_blank" rel="noopener noreferrer" className="p-2 bg-zinc-900/50 hover:bg-pink-500/10 text-zinc-400 hover:text-pink-500 border border-zinc-800 rounded-lg transition-all" title="Instagram">
                 <Instagram className="w-4 h-4" />
               </a>
+              <a href="https://www.facebook.com/Teonanacatl94" target="_blank" rel="noopener noreferrer" className="p-2 bg-zinc-900/50 hover:bg-[#1877F2]/10 text-zinc-400 hover:text-[#1877F2] border border-zinc-800 rounded-lg transition-all" title="Facebook">
+                <Facebook className="w-4 h-4" />
+              </a>
             </div>
 
             {/* Mobile Menu Icon */}
@@ -1712,6 +1716,9 @@ Só quero viver minha vida, mas não consigo...`
               </a>
               <a href="https://www.instagram.com/teonanacatl94/" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-pink-500">
                 <Instagram className="w-5 h-5" />
+              </a>
+              <a href="https://www.facebook.com/Teonanacatl94" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-[#1877F2]">
+                <Facebook className="w-5 h-5" />
               </a>
             </div>
           </div>
@@ -2773,6 +2780,10 @@ Só quero viver minha vida, mas não consigo...`
             <span className="text-zinc-805">•</span>
             <a href="https://soundcloud.com/teonanacatl94/sets/teonanacatl-94-recovered" target="_blank" rel="noopener noreferrer" className="font-orbitron text-xs tracking-wider uppercase font-black text-zinc-500 hover:text-pink-505 transition-colors">
               SOUNDCLOUD
+            </a>
+            <span className="text-zinc-850">•</span>
+            <a href="https://www.facebook.com/Teonanacatl94" target="_blank" rel="noopener noreferrer" className="font-orbitron text-xs tracking-wider uppercase font-black text-zinc-500 hover:text-[#1877F2] transition-colors">
+              FACEBOOK
             </a>
           </div>
 

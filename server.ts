@@ -288,8 +288,10 @@ async function startServer() {
               `Recebemos suas informações e sua mensagem. É uma honra ter você conosco vibrando na mesma frequência.\n\n` +
               `Sua música favorita selecionada: ${favoriteTrack || "Não informada"}\n\n` +
               `Acesse nosso site: https://www.teonanacatl94.com.br\n` +
+              `Escute no Spotify: https://open.spotify.com/intl-pt/artist/26hUmRb9oyf0KlZ2xcBtkZ?si=oNZVWb0vT4qKQROorqEhUw\n` +
               `Siga-nos no Instagram: https://www.instagram.com/teonanacatl94/\n` +
-              `Siga-nos no YouTube: https://www.youtube.com/@Teonanacatl94\n\n` +
+              `Siga-nos no YouTube: https://www.youtube.com/@Teonanacatl94\n` +
+              `Curta nossa página no Facebook: https://www.facebook.com/Teonanacatl94\n\n` +
               `Abraços,\nBanda Teonanacatl 94`,
         html: `
           <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #1f1f22; border-radius: 12px; background-color: #0c0c0e; color: #f4f4f5; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
@@ -310,7 +312,7 @@ async function startServer() {
                 <strong style="color: #10b981; font-size: 16px; font-family: 'Courier New', Courier, monospace;">${favoriteTrack || "Não informada"}</strong>
               </div>
               
-              <p style="color: #d4d4d8; line-height: 1.6; font-size: 14px;">Prepare-se para receber atualizações exclusivas sobre novos lançamentos digitais, fita cassete, remasters de 2026 e as próximas apresentações na estrada.</p>
+              <p style="color: #d4d4d8; line-height: 1.6; font-size: 14px;">Prepare-se para receber updates exclusivas sobre novos lançamentos digitais, fita cassete, remasters de 2026 e as próximas apresentações na estrada.</p>
               
               <div style="margin-top: 35px; border-top: 1px solid #1f1f22; padding-top: 20px; text-align: center;">
                 <p style="font-size: 13px; color: #a1a1aa; margin-bottom: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Conecte-se Conosco:</p>
@@ -318,11 +320,17 @@ async function startServer() {
                   <a href="https://www.teonanacatl94.com.br" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #10b981; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #10b981;">
                     🌐 SITE OFICIAL
                   </a>
+                  <a href="https://open.spotify.com/intl-pt/artist/26hUmRb9oyf0KlZ2xcBtkZ?si=oNZVWb0vT4qKQROorqEhUw" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #1DB954; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #1DB954;">
+                    🎵 SPOTIFY
+                  </a>
                   <a href="https://www.instagram.com/teonanacatl94/" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #ec4899; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #ec4899;">
                     📸 INSTAGRAM
                   </a>
                   <a href="https://www.youtube.com/@Teonanacatl94" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #ef4444; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #ef4444;">
                     📺 YOUTUBE
+                  </a>
+                  <a href="https://www.facebook.com/Teonanacatl94" target="_blank" style="display: inline-block; padding: 8px 16px; margin: 5px; background-color: #18181b; color: #1877F2; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #1877F2;">
+                    👥 FACEBOOK
                   </a>
                 </div>
               </div>
