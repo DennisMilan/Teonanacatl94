@@ -1,10 +1,24 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Initialize Analytics conditionally (safely for all browser environments)
+export let analytics: Analytics | null = null;
+if (typeof window !== 'undefined') {
+  isSupported().then((supported) => {
+    if (supported) {
+      analytics = getAnalytics(app);
+      console.log('Google Analytics initialized successfully.');
+    }
+  }).catch((err) => {
+    console.warn('Google Analytics is not supported in this environment:', err);
+  });
+}
 
 const provider = new GoogleAuthProvider();
 // Add required Google Sheets and Drive scopes
