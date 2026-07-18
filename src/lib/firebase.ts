@@ -25,8 +25,8 @@ const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 
-// In-memory cache for access token
-let cachedAccessToken: string | null = null;
+// In-memory and local storage cache for access token
+let cachedAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('t94_cached_token') : null;
 let isSigningIn = false;
 
 export const initAuth = (
@@ -35,15 +35,21 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
+      const savedToken = typeof window !== 'undefined' ? localStorage.getItem('t94_cached_token') : null;
+      if (savedToken) {
+        cachedAccessToken = savedToken;
+        if (onAuthSuccess) onAuthSuccess(user, savedToken);
+      } else if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // Try to trigger sign in or reset
+      } else {
         cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('t94_cached_token');
+      }
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -58,6 +64,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       throw new Error('Failed to get access token from Firebase Auth');
     }
     cachedAccessToken = credential.accessToken;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('t94_cached_token', cachedAccessToken);
+    }
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Sign in error:', error);
@@ -74,4 +83,7 @@ export const getAccessToken = (): string | null => {
 export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('t94_cached_token');
+  }
 };

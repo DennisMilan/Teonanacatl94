@@ -54,7 +54,8 @@ import {
   fetchFansFromSheet, 
   searchSpreadsheetsInDrive, 
   SpreadsheetInfo, 
-  GoogleFanRow 
+  GoogleFanRow,
+  getExactFansTabName
 } from './lib/googleSheets';
 
 // Interfaces
@@ -342,6 +343,8 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [adminStatus, setAdminStatus] = useState<{ text: string; type: 'success' | 'error' | 'info' | null }>({ text: '', type: null });
   const [hasAdminQuery, setHasAdminQuery] = useState(false);
+  const [manualSheetInput, setManualSheetInput] = useState('');
+  const [isConnectingManual, setIsConnectingManual] = useState(false);
 
   const showAdminButton =
     hasAdminQuery ||
@@ -367,11 +370,147 @@ export default function App() {
     }
   };
 
+  // Synchronize credentials for an already configured spreadsheet on the backend (prevents folder/file recreation)
+  const syncExistingSheetConfig = async (token: string, sheetId: string) => {
+    try {
+      const sheetName = localStorage.getItem('t94_sheets_name') || 'Planilha Vinculada';
+      const sheetUrl = localStorage.getItem('t94_sheets_url') || `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+      const resolvedTabName = await getExactFansTabName(token, sheetId);
+      
+      await fetch('/api/admin/sheets-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          spreadsheetId: sheetId,
+          accessToken: token,
+          spreadsheetName: sheetName,
+          spreadsheetUrl: sheetUrl,
+          fansTabName: resolvedTabName,
+        }),
+      });
+      console.log('Sincronização de credenciais de planilha existente efetuada com sucesso.');
+    } catch (err) {
+      console.error('Erro ao sincronizar config de planilha existente:', err);
+    }
+  };
+
+  // Connect a spreadsheet manually using its ID or full web URL (highly secure and respects custom folders)
+  const handleConnectManualSheet = async () => {
+    if (!manualSheetInput.trim()) return;
+    const activeToken = adminToken;
+    if (!activeToken) {
+      setAdminStatus({ text: 'Por favor, faça login com o Google para autorizar o acesso à planilha.', type: 'error' });
+      return;
+    }
+
+    setIsConnectingManual(true);
+    setAdminStatus({ text: 'Validando acesso à planilha vinculada...', type: 'info' });
+
+    try {
+      let sheetId = manualSheetInput.trim();
+
+      // Detect if user pasted the raw JSON content of a .gsheet file shortcut
+      if (sheetId.startsWith('{') && sheetId.includes('"url"')) {
+        try {
+          const parsed = JSON.parse(sheetId);
+          if (parsed.url) {
+            sheetId = parsed.url;
+            console.log('Detectado arquivo .gsheet colado como JSON. URL extraída:', sheetId);
+          }
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
+
+      // Check if they pasted a relative or absolute local filesystem path or folder path
+      if (
+        sheetId.startsWith('.') || 
+        sheetId.startsWith('/') || 
+        sheetId.includes('\\') || 
+        sheetId.toLowerCase().endsWith('.gsheet') || 
+        sheetId.toLowerCase().endsWith('.xlsx') || 
+        sheetId.toLowerCase().endsWith('.xls') ||
+        (sheetId.includes('Cadastro') && !sheetId.includes('http'))
+      ) {
+        let errorMsg = 'Você inseriu um caminho de arquivo ou pasta local (ex: ./Teonanacatl/Cadastro...). ';
+        errorMsg += 'O Google Sheets é um serviço na nuvem: abra a planilha no navegador do seu computador (através do Google Drive), copie o link completo da barra de endereços (começando com https://docs.google.com/spreadsheets/d/...) e cole aqui.';
+        throw new Error(errorMsg);
+      }
+
+      // Extract spreadsheet ID or general file ID from typical Google Sheets/Drive URLs if pasted
+      const urlMatch = sheetId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/) || sheetId.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
+      if (urlMatch && urlMatch[1]) {
+        sheetId = urlMatch[1];
+      }
+
+      // Check if the spreadsheet is accessible by making a request to our server proxy (bypasses browser CORS completely)
+      const response = await fetch('/api/admin/verify-sheet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          spreadsheetId: sheetId,
+          accessToken: activeToken,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Não foi possível validar o acesso à planilha.');
+      }
+
+      const data = await response.json();
+      const finalSheetId = data.spreadsheetId || sheetId;
+      const sheetName = data.title || 'Planilha Vinculada';
+      const sheetUrl = `https://docs.google.com/spreadsheets/d/${finalSheetId}/edit`;
+
+      setSelectedSheetId(finalSheetId);
+      setSelectedSheetUrl(sheetUrl);
+      setSelectedSheetName(sheetName);
+      localStorage.setItem('t94_sheets_id', finalSheetId);
+      localStorage.setItem('t94_sheets_url', sheetUrl);
+      localStorage.setItem('t94_sheets_name', sheetName);
+
+      // Persist config to backend
+      await fetch('/api/admin/sheets-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          spreadsheetId: finalSheetId,
+          accessToken: activeToken,
+          spreadsheetName: sheetName,
+          spreadsheetUrl: sheetUrl,
+          fansTabName: data.fansTabName, // Pass the dynamically resolved tab name
+        }),
+      });
+
+      if (data.wasConverted) {
+        setAdminStatus({ text: `O arquivo Excel "${data.originalName}" foi detectado e convertido em Planilha Google com sucesso como "${sheetName}"! Novos cadastros serão gravados nela. 🚀`, type: 'success' });
+      } else {
+        setAdminStatus({ text: `Planilha "${sheetName}" vinculada com sucesso! Novos cadastros serão gravados nela. 🚀`, type: 'success' });
+      }
+      setManualSheetInput('');
+      searchSheets(activeToken);
+    } catch (err: any) {
+      console.error('Erro ao conectar planilha manual:', err);
+      setAdminStatus({ text: `Falha ao conectar planilha manualmente: ${err.message}`, type: 'error' });
+    } finally {
+      setIsConnectingManual(false);
+    }
+  };
+
   // Auto configure "cadastro.xlsx" on Google Drive and register with the backend server
   const autoConfigureSheets = async (token: string, email: string) => {
     try {
       setAdminStatus({ text: 'Sincronizando planilha "cadastro.xlsx" no Google Sheets...', type: 'info' });
       const info = await getOrCreateSpreadsheet(token, 'cadastro.xlsx');
+      
+      const resolvedTabName = await getExactFansTabName(token, info.id);
       
       setSelectedSheetId(info.id);
       setSelectedSheetUrl(info.url);
@@ -391,6 +530,7 @@ export default function App() {
           accessToken: token,
           spreadsheetName: info.name,
           spreadsheetUrl: info.url,
+          fansTabName: resolvedTabName,
         }),
       });
 
@@ -425,7 +565,13 @@ export default function App() {
         setAdminUser(user);
         setAdminToken(token);
         setAdminStatus({ text: `Conectado como ${user.email}`, type: 'success' });
-        autoConfigureSheets(token, user.email || '');
+        
+        const savedSheetId = localStorage.getItem('t94_sheets_id') || selectedSheetId;
+        if (savedSheetId) {
+          syncExistingSheetConfig(token, savedSheetId);
+        } else {
+          setAdminStatus({ text: 'Conectado. Abra a sua planilha no navegador, copie o link da barra de endereços (ex: https://docs.google.com/spreadsheets/d/...) e cole abaixo para vinculá-la.', type: 'info' });
+        }
       },
       () => {
         setAdminUser(null);
@@ -453,7 +599,13 @@ export default function App() {
         setAdminUser(result.user);
         setAdminToken(result.accessToken);
         setAdminStatus({ text: `Conectado com sucesso: ${result.user.email}`, type: 'success' });
-        autoConfigureSheets(result.accessToken, result.user.email || '');
+        
+        const savedSheetId = localStorage.getItem('t94_sheets_id') || selectedSheetId;
+        if (savedSheetId) {
+          syncExistingSheetConfig(result.accessToken, savedSheetId);
+        } else {
+          setAdminStatus({ text: 'Conectado com sucesso. Abra a sua planilha no navegador, copie o link da barra de endereços (ex: https://docs.google.com/spreadsheets/d/...) e cole abaixo para vinculá-la.', type: 'info' });
+        }
       }
     } catch (e: any) {
       setAdminStatus({ text: `Erro de login: ${e.message || 'Falha na autenticação'}`, type: 'error' });
@@ -524,25 +676,55 @@ export default function App() {
   };
 
   const handleSyncFans = async () => {
-    if (!adminToken || !selectedSheetId) return;
+    if (!selectedSheetId) {
+      setAdminStatus({ text: 'Por favor, vincule uma planilha antes de sincronizar.', type: 'error' });
+      return;
+    }
+    if (!adminToken) {
+      setAdminStatus({ text: 'Sua sessão expirou ou você não está autenticado. Por favor, faça login com o Google novamente.', type: 'error' });
+      return;
+    }
     setIsSyncing(true);
-    setAdminStatus({ text: 'Sincronizando cadastros com o Google Sheets...', type: 'info' });
+    setAdminStatus({ text: 'Buscando os cadastros mais recentes do servidor...', type: 'info' });
     try {
+      // 1. Fetch latest local fans from the server database
+      const localResponse = await fetch('/api/fans');
+      if (!localResponse.ok) {
+        throw new Error('Falha ao carregar registros do servidor local.');
+      }
+      const localData = await localResponse.json();
+      const latestLocalFans = localData.success ? (localData.fans || []) : [];
+      setLocalFans(latestLocalFans);
+
+      if (latestLocalFans.length === 0) {
+        setAdminStatus({ text: 'Nenhum cadastro local encontrado para sincronizar.', type: 'info' });
+        setIsSyncing(false);
+        return;
+      }
+
+      setAdminStatus({ text: 'Lendo registros existentes no Google Sheets...', type: 'info' });
       let existingEmails = new Set<string>();
       try {
         const googleRows = await fetchFansFromSheet(adminToken, selectedSheetId);
-        existingEmails = new Set(googleRows.map(row => row.email.toLowerCase().trim()));
+        existingEmails = new Set(
+          googleRows
+            .map(row => (row.email || '').toLowerCase().trim())
+            .filter(email => email !== '')
+        );
       } catch (err) {
         console.warn('Could not read existing sheet, proceeding to append.', err);
       }
 
-      const unsyncedFans = localFans.filter(fan => !existingEmails.has(fan.email.toLowerCase().trim()));
+      const unsyncedFans = latestLocalFans.filter(fan => !existingEmails.has(fan.email.toLowerCase().trim()));
 
       if (unsyncedFans.length === 0) {
-        setAdminStatus({ text: 'Sincronização concluída! Todos os cadastros já estão no Google Sheets.', type: 'success' });
+        setAdminStatus({ text: 'Sincronização concluída! Todos os cadastros locais já estão gravados no Google Sheets. 🤘', type: 'success' });
         setIsSyncing(false);
         return;
       }
+
+      const resolvedTabName = await getExactFansTabName(adminToken, selectedSheetId);
+      setAdminStatus({ text: `Enviando ${unsyncedFans.length} novo(s) fã(s) para a aba "${resolvedTabName}" no Google Sheets...`, type: 'info' });
 
       const rowsToAppend: GoogleFanRow[] = unsyncedFans.map(fan => ({
         timestamp: fan.timestamp,
@@ -560,9 +742,10 @@ export default function App() {
       }));
 
       await appendBulkFansToSheet(adminToken, selectedSheetId, rowsToAppend);
-      setAdminStatus({ text: `Sucesso! ${unsyncedFans.length} novo(s) fã(s) sincronizado(s) no Google Sheets! 🤘`, type: 'success' });
+      setAdminStatus({ text: `Sucesso! ${unsyncedFans.length} novo(s) fã(s) sincronizado(s) com sucesso na aba "${resolvedTabName}" no Google Sheets! 🤘`, type: 'success' });
     } catch (e: any) {
-      setAdminStatus({ text: `Erro na sincronização: ${e.message}`, type: 'error' });
+      console.error('Erro na sincronização:', e);
+      setAdminStatus({ text: `Erro na sincronização: ${e.message || e}`, type: 'error' });
     } finally {
       setIsSyncing(false);
     }
@@ -2768,9 +2951,35 @@ Só quero viver minha vida, mas não consigo...`
 
                       {/* Spreadsheet Picker / Selector from Drive */}
                       {!selectedSheetId && (
-                        <div className="space-y-3 pt-3 border-t border-zinc-900">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold tracking-wider">Ou vincule uma existente:</span>
+                        <div className="space-y-4 pt-3 border-t border-zinc-900">
+                          {/* Manual input connection */}
+                          <div className="space-y-2 bg-zinc-950/40 p-3.5 rounded-xl border border-zinc-900">
+                            <span className="text-[10px] font-mono text-zinc-400 uppercase font-bold tracking-wider block">
+                              Vincular por Link ou ID da Planilha:
+                            </span>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="Cole o link da planilha existente..."
+                                value={manualSheetInput}
+                                onChange={(e) => setManualSheetInput(e.target.value)}
+                                className="flex-1 bg-zinc-950 border border-zinc-900 focus:border-emerald-500/50 rounded-lg px-3 py-2 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none transition-colors"
+                              />
+                              <button
+                                onClick={handleConnectManualSheet}
+                                disabled={isConnectingManual || !manualSheetInput.trim()}
+                                className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 px-4 py-2 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-950 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                              >
+                                {isConnectingManual ? 'Validando...' : 'Vincular'}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 leading-relaxed font-sans mt-1">
+                              <strong>Instruções de Vinculação:</strong> Abra a sua planilha (seja o arquivo convertido ou uma planilha do Google) no navegador de internet do seu computador. Copie todo o link da barra de endereços (deve começar com <code>https://docs.google.com/spreadsheets/d/...</code>) e cole no campo acima para vincular. Caminhos locais de arquivos (como <code>./Teonanacatl/Cadastro</code>) não funcionam por ser um serviço na nuvem.
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold tracking-wider">Ou escolha das criadas pelo App:</span>
                             <button
                               onClick={() => searchSheets()}
                               className="text-[10px] font-mono text-emerald-400 hover:underline cursor-pointer flex items-center space-x-1"

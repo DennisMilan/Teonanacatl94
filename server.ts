@@ -141,7 +141,8 @@ async function startServer() {
           const config = JSON.parse(configRaw);
           if (config.spreadsheetId && config.accessToken) {
             console.log(`[GOOGLE SHEETS] Tentando inserir fã na planilha "${config.spreadsheetId}" em tempo real...`);
-            const range = "Fãs!A:L";
+            const fansTabName = config.fansTabName || "Fãs";
+            const range = `${fansTabName}!A:L`;
             const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED`;
             
             const formattedPhone = phone ? (String(phone).startsWith("'") ? String(phone) : `'${phone}`) : "";
@@ -406,7 +407,7 @@ async function startServer() {
   // Save Google Sheets config (For real-time sync on new registrations)
   app.post("/api/admin/sheets-config", (req, res) => {
     try {
-      const { spreadsheetId, accessToken, spreadsheetName, spreadsheetUrl } = req.body;
+      const { spreadsheetId, accessToken, spreadsheetName, spreadsheetUrl, fansTabName } = req.body;
       const sheetsConfigPath = path.join(process.cwd(), "Nanos", "sheets_config.json");
       
       let config: any = {};
@@ -424,6 +425,7 @@ async function startServer() {
         accessToken: accessToken || config.accessToken,
         spreadsheetName: spreadsheetName || config.spreadsheetName,
         spreadsheetUrl: spreadsheetUrl || config.spreadsheetUrl,
+        fansTabName: fansTabName || config.fansTabName || "Fãs",
         updatedAt: new Date().toISOString()
       };
 
@@ -432,6 +434,223 @@ async function startServer() {
     } catch (err: any) {
       console.error("Erro ao salvar configuração do Google Sheets no servidor:", err);
       res.status(500).json({ error: err.message || "Erro ao salvar configuração no servidor." });
+    }
+  });
+
+  // Helper function to ensure target tab has headers and resolve its name
+  async function ensureFansTabExists(spreadsheetId: string, accessToken: string): Promise<string> {
+    try {
+      const getSheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(title)`;
+      const response = await fetch(getSheetsUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        }
+      });
+
+      if (!response.ok) {
+        console.warn(`[ensureFansTabExists] Não foi possível ler as abas da planilha ${spreadsheetId}.`);
+        return "Fãs";
+      }
+
+      const data = await response.json();
+      const sheets = data.sheets || [];
+      
+      // Find "Fãs" or "Fas" tab
+      const foundTab = sheets.find((s: any) => {
+        const title = (s.properties?.title || "").toLowerCase().trim();
+        return title === "fãs" || title === "fas";
+      });
+
+      let targetTabName = "Fãs";
+      if (foundTab) {
+        targetTabName = foundTab.properties.title;
+        console.log(`[ensureFansTabExists] Aba "${targetTabName}" encontrada na planilha ${spreadsheetId}.`);
+      } else if (sheets.length > 0 && sheets[0]?.properties?.title) {
+        targetTabName = sheets[0].properties.title;
+        console.log(`[ensureFansTabExists] Nenhuma aba "Fãs" encontrada. Usando a primeira aba da planilha: "${targetTabName}"`);
+      } else {
+        // Fallback: create "Fãs" if sheet is completely empty of tabs (rare)
+        console.log(`[ensureFansTabExists] Criando aba "Fãs" padrão...`);
+        const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+        await fetch(batchUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            requests: [{ addSheet: { properties: { title: "Fãs" } } }]
+          })
+        });
+      }
+
+      // Check if target tab has headers, if not, write them
+      const checkUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(targetTabName)}!A1:B1`;
+      const checkRes = await fetch(checkUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      let needsHeaders = true;
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        const vals = checkData.values || [];
+        if (vals.length > 0 && vals[0] && vals[0][0]) {
+          needsHeaders = false;
+        }
+      }
+
+      if (needsHeaders) {
+        console.log(`[ensureFansTabExists] Aba "${targetTabName}" está vazia ou sem cabeçalhos. Escrevendo cabeçalhos...`);
+        const headersUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(targetTabName)}!A1:L1?valueInputOption=USER_ENTERED`;
+        const headers = [
+          "Data/Hora",
+          "Nome",
+          "E-mail",
+          "Celular",
+          "Instagram",
+          "TikTok",
+          "Idade",
+          "País",
+          "Estado",
+          "Cidade",
+          "Música Favorita",
+          "Mensagem"
+        ];
+
+        await fetch(headersUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            range: `${targetTabName}!A1:L1`,
+            majorDimension: "ROWS",
+            values: [headers]
+          })
+        });
+        console.log(`[ensureFansTabExists] Cabeçalhos configurados na aba "${targetTabName}".`);
+      }
+
+      return targetTabName;
+    } catch (err) {
+      console.error(`[ensureFansTabExists] Erro ao garantir existência da aba/cabeçalhos:`, err);
+    }
+    return "Fãs";
+  }
+
+  // Verify if a Google Sheet is accessible using server-side fetch (bypasses browser CORS)
+  app.post("/api/admin/verify-sheet", async (req, res) => {
+    try {
+      const { spreadsheetId, accessToken } = req.body;
+      if (!spreadsheetId || !accessToken) {
+        return res.status(400).json({ error: "Faltando ID da planilha ou token de acesso." });
+      }
+
+      console.log(`[SERVER VERIFY-SHEET] Validando acesso da planilha ID: ${spreadsheetId}`);
+
+      // 1. First, try to query via Google Sheets API (bypasses drive.file scope limitations for native sheets)
+      const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=properties(title),sheets.properties(title)`;
+      const sheetsResponse = await fetch(sheetsUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (sheetsResponse.ok) {
+        const data = await sheetsResponse.json();
+        const title = data.properties?.title || "Planilha Vinculada";
+        console.log(`[SERVER VERIFY-SHEET] Sucesso via Google Sheets API! Título: "${title}"`);
+
+        // Resolve active tab and configure headers dynamically
+        const resolvedFansTabName = await ensureFansTabExists(spreadsheetId, accessToken);
+
+        return res.json({
+          success: true,
+          spreadsheetId,
+          title,
+          fansTabName: resolvedFansTabName,
+          wasConverted: false
+        });
+      }
+
+      // 2. If Sheets API failed, it could be that it is an Excel file (.xlsx) inside Google Drive.
+      // Let's call the Drive API to inspect if it's an Excel spreadsheet.
+      console.log(`[SERVER VERIFY-SHEET] Sheets API retornou status ${sheetsResponse.status}. Verificando via Drive API se é arquivo Excel (.xlsx)...`);
+      const driveMetaUrl = `https://www.googleapis.com/drive/v3/files/${spreadsheetId}?fields=id,name,mimeType,parents`;
+      const driveResponse = await fetch(driveMetaUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (driveResponse.ok) {
+        const fileMeta = await driveResponse.json();
+        const mimeType = fileMeta.mimeType;
+        const fileName = fileMeta.name || "Cadastro";
+
+        const isExcel = mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || 
+                        fileName.toLowerCase().endsWith(".xlsx") || 
+                        fileName.toLowerCase().endsWith(".xls");
+
+        if (isExcel) {
+          console.log(`[SERVER VERIFY-SHEET] Detectado arquivo Excel: "${fileName}" (ID: ${spreadsheetId}). Convertendo para Planilha Google...`);
+          
+          const copyUrl = `https://www.googleapis.com/drive/v3/files/${spreadsheetId}/copy`;
+          const body: any = {
+            name: fileName.replace(/\.xlsx$/i, "").replace(/\.xls$/i, ""), // Remove extension
+            mimeType: "application/vnd.google-apps.spreadsheet",
+          };
+          if (fileMeta.parents && fileMeta.parents.length > 0) {
+            body.parents = fileMeta.parents;
+          }
+
+          const copyResponse = await fetch(copyUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(body),
+          });
+
+          if (copyResponse.ok) {
+            const convertedMeta = await copyResponse.json();
+            const convertedId = convertedMeta.id;
+            console.log(`[SERVER VERIFY-SHEET] Conversão efetuada com sucesso! Novo ID: ${convertedId}`);
+
+            // Make sure the converted sheet has target tab and headers
+            const resolvedFansTabName = await ensureFansTabExists(convertedId, accessToken);
+
+            return res.json({
+              success: true,
+              spreadsheetId: convertedId,
+              title: convertedMeta.name || "Cadastro",
+              fansTabName: resolvedFansTabName,
+              wasConverted: true,
+              originalName: fileName
+            });
+          } else {
+            const copyErrText = await copyResponse.text().catch(() => "");
+            console.error(`[SERVER VERIFY-SHEET] Falha ao converter Excel em Planilha Google. Status: ${copyResponse.status}. Detalhes:`, copyErrText);
+          }
+        }
+      }
+
+      // 3. If both failed, analyze the error of the Sheets API call (primary API)
+      const sheetsErrText = await sheetsResponse.text().catch(() => "");
+      console.warn(`[SERVER VERIFY-SHEET] Falha total. Status Sheets API: ${sheetsResponse.status}. Detalhes:`, sheetsErrText);
+      
+      let customMsg = "Não foi possível acessar a planilha.";
+      if (sheetsResponse.status === 403 || sheetsResponse.status === 401) {
+        customMsg = "Acesso negado. Certifique-se de que a planilha existe e sua conta Google tem permissão de editor.";
+      } else if (sheetsResponse.status === 404) {
+        customMsg = "Planilha não encontrada. Verifique se o link ou ID está correto.";
+      }
+      return res.status(sheetsResponse.status || 400).json({ error: customMsg });
+
+    } catch (err: any) {
+      console.error("[SERVER SHEETS VERIFICATION ERROR] Erro ao validar planilha no servidor:", err);
+      res.status(500).json({ error: `Erro de conexão com o Google: ${err.message || err}` });
     }
   });
 
