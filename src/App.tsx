@@ -28,8 +28,34 @@ import {
   Download,
   RefreshCw,
   Database,
-  AlertTriangle
+  AlertTriangle,
+  Lock,
+  Unlock,
+  FileSpreadsheet,
+  LogOut,
+  Plus,
+  Search,
+  Trash2,
+  ShieldCheck
 } from 'lucide-react';
+
+import { User } from 'firebase/auth';
+import { 
+  initAuth, 
+  googleSignIn, 
+  logout as googleLogout, 
+  getAccessToken 
+} from './lib/firebase';
+import { 
+  createTeonanacatlSheet, 
+  getOrCreateSpreadsheet,
+  appendFanToSheet, 
+  appendBulkFansToSheet, 
+  fetchFansFromSheet, 
+  searchSpreadsheetsInDrive, 
+  SpreadsheetInfo, 
+  GoogleFanRow 
+} from './lib/googleSheets';
 
 // Interfaces
 interface Track {
@@ -301,6 +327,258 @@ export default function App() {
   const [isSubmittingFan, setIsSubmittingFan] = useState(false);
   const [fanSubmitStatus, setFanSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
+  // Google Sheets integration state
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [adminUser, setAdminUser] = useState<User | null>(null);
+  const [adminToken, setAdminToken] = useState<string | null>(null);
+  const [isSearchingSheets, setIsSearchingSheets] = useState(false);
+  const [availableSheets, setAvailableSheets] = useState<SpreadsheetInfo[]>([]);
+  const [selectedSheetId, setSelectedSheetId] = useState<string>(() => localStorage.getItem('t94_sheets_id') || '');
+  const [selectedSheetUrl, setSelectedSheetUrl] = useState<string>(() => localStorage.getItem('t94_sheets_url') || '');
+  const [selectedSheetName, setSelectedSheetName] = useState<string>(() => localStorage.getItem('t94_sheets_name') || '');
+  const [localFans, setLocalFans] = useState<any[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isLoadingLocalFans, setIsLoadingLocalFans] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [adminStatus, setAdminStatus] = useState<{ text: string; type: 'success' | 'error' | 'info' | null }>({ text: '', type: null });
+  const [hasAdminQuery, setHasAdminQuery] = useState(false);
+
+  // Fetch local fans
+  const fetchLocalFans = async () => {
+    setIsLoadingLocalFans(true);
+    try {
+      const response = await fetch('/api/fans');
+      const data = await response.json();
+      if (data.success) {
+        setLocalFans(data.fans || []);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar fãs locais:', e);
+    } finally {
+      setIsLoadingLocalFans(false);
+    }
+  };
+
+  // Auto configure "cadastro.xlsx" on Google Drive and register with the backend server
+  const autoConfigureSheets = async (token: string, email: string) => {
+    try {
+      setAdminStatus({ text: 'Sincronizando planilha "cadastro.xlsx" no Google Sheets...', type: 'info' });
+      const info = await getOrCreateSpreadsheet(token, 'cadastro.xlsx');
+      
+      setSelectedSheetId(info.id);
+      setSelectedSheetUrl(info.url);
+      setSelectedSheetName(info.name);
+      localStorage.setItem('t94_sheets_id', info.id);
+      localStorage.setItem('t94_sheets_url', info.url);
+      localStorage.setItem('t94_sheets_name', info.name);
+
+      // Save to server-side backend config
+      await fetch('/api/admin/sheets-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          spreadsheetId: info.id,
+          accessToken: token,
+          spreadsheetName: info.name,
+          spreadsheetUrl: info.url,
+        }),
+      });
+
+      setAdminStatus({ 
+        text: `Planilha "cadastro.xlsx" vinculada com sucesso à conta ${email}! Novos cadastros do site serão inseridos nela em tempo real. 🚀`, 
+        type: 'success' 
+      });
+      searchSheets(token);
+    } catch (err: any) {
+      console.error('Erro na configuração automática do Sheets:', err);
+      setAdminStatus({ text: `Falha ao vincular planilha "cadastro.xlsx": ${err.message}`, type: 'error' });
+    }
+  };
+
+  // Load local fans and auth state on mount
+  useEffect(() => {
+    // Check URL parameters for admin flag
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === 'true' || params.get('adm') === 'true') {
+      setHasAdminQuery(true);
+    }
+
+    const unsubscribe = initAuth(
+      (user, token) => {
+        if (user.email?.toLowerCase().trim() !== 'dgmilan@gmail.com') {
+          setAdminStatus({ text: 'Acesso restrito apenas para o administrador dgmilan@gmail.com.', type: 'error' });
+          googleLogout();
+          setAdminUser(null);
+          setAdminToken(null);
+          return;
+        }
+        setAdminUser(user);
+        setAdminToken(token);
+        setAdminStatus({ text: `Conectado como ${user.email}`, type: 'success' });
+        autoConfigureSheets(token, user.email || '');
+      },
+      () => {
+        setAdminUser(null);
+        setAdminToken(null);
+      }
+    );
+
+    fetchLocalFans();
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleAdminLogin = async () => {
+    try {
+      setAdminStatus({ text: 'Iniciando autenticação...', type: 'info' });
+      const result = await googleSignIn();
+      if (result) {
+        if (result.user.email?.toLowerCase().trim() !== 'dgmilan@gmail.com') {
+          setAdminStatus({ text: 'Acesso negado: apenas o administrador dgmilan@gmail.com tem permissão.', type: 'error' });
+          await googleLogout();
+          setAdminUser(null);
+          setAdminToken(null);
+          return;
+        }
+        setAdminUser(result.user);
+        setAdminToken(result.accessToken);
+        setAdminStatus({ text: `Conectado com sucesso: ${result.user.email}`, type: 'success' });
+        autoConfigureSheets(result.accessToken, result.user.email || '');
+      }
+    } catch (e: any) {
+      setAdminStatus({ text: `Erro de login: ${e.message || 'Falha na autenticação'}`, type: 'error' });
+    }
+  };
+
+  const handleAdminLogout = async () => {
+    try {
+      await googleLogout();
+      setAdminUser(null);
+      setAdminToken(null);
+      setAdminStatus({ text: 'Sessão encerrada.', type: 'info' });
+    } catch (e: any) {
+      setAdminStatus({ text: `Erro ao sair: ${e.message}`, type: 'error' });
+    }
+  };
+
+  const searchSheets = async (token?: string) => {
+    const activeToken = token || adminToken;
+    if (!activeToken) return;
+    setIsSearchingSheets(true);
+    try {
+      const sheets = await searchSpreadsheetsInDrive(activeToken);
+      setAvailableSheets(sheets);
+    } catch (e: any) {
+      console.error('Erro ao buscar planilhas:', e);
+    } finally {
+      setIsSearchingSheets(false);
+    }
+  };
+
+  const handleCreateNewSheet = async () => {
+    if (!adminToken) return;
+    try {
+      setAdminStatus({ text: 'Criando nova planilha de fãs...', type: 'info' });
+      const info = await createTeonanacatlSheet(adminToken);
+      setSelectedSheetId(info.id);
+      setSelectedSheetUrl(info.url);
+      setSelectedSheetName(info.name);
+      localStorage.setItem('t94_sheets_id', info.id);
+      localStorage.setItem('t94_sheets_url', info.url);
+      localStorage.setItem('t94_sheets_name', info.name);
+      setAdminStatus({ text: 'Planilha criada e vinculada com sucesso! 🚀', type: 'success' });
+      searchSheets(adminToken);
+    } catch (e: any) {
+      setAdminStatus({ text: `Erro ao criar planilha: ${e.message}`, type: 'error' });
+    }
+  };
+
+  const handleSelectSheet = (sheet: SpreadsheetInfo) => {
+    setSelectedSheetId(sheet.id);
+    setSelectedSheetUrl(sheet.url);
+    setSelectedSheetName(sheet.name);
+    localStorage.setItem('t94_sheets_id', sheet.id);
+    localStorage.setItem('t94_sheets_url', sheet.url);
+    localStorage.setItem('t94_sheets_name', sheet.name);
+    setAdminStatus({ text: `Planilha vinculada: "${sheet.name}"`, type: 'success' });
+  };
+
+  const handleDisconnectSheet = () => {
+    setSelectedSheetId('');
+    setSelectedSheetUrl('');
+    setSelectedSheetName('');
+    localStorage.removeItem('t94_sheets_id');
+    localStorage.removeItem('t94_sheets_url');
+    localStorage.removeItem('t94_sheets_name');
+    setAdminStatus({ text: 'Planilha desvinculada.', type: 'info' });
+  };
+
+  const handleSyncFans = async () => {
+    if (!adminToken || !selectedSheetId) return;
+    setIsSyncing(true);
+    setAdminStatus({ text: 'Sincronizando cadastros com o Google Sheets...', type: 'info' });
+    try {
+      let existingEmails = new Set<string>();
+      try {
+        const googleRows = await fetchFansFromSheet(adminToken, selectedSheetId);
+        existingEmails = new Set(googleRows.map(row => row.email.toLowerCase().trim()));
+      } catch (err) {
+        console.warn('Could not read existing sheet, proceeding to append.', err);
+      }
+
+      const unsyncedFans = localFans.filter(fan => !existingEmails.has(fan.email.toLowerCase().trim()));
+
+      if (unsyncedFans.length === 0) {
+        setAdminStatus({ text: 'Sincronização concluída! Todos os cadastros já estão no Google Sheets.', type: 'success' });
+        setIsSyncing(false);
+        return;
+      }
+
+      const rowsToAppend: GoogleFanRow[] = unsyncedFans.map(fan => ({
+        timestamp: fan.timestamp,
+        name: fan.name,
+        email: fan.email,
+        phone: fan.phone,
+        instagram: fan.instagram,
+        tiktok: fan.tiktok,
+        age: String(fan.age),
+        country: fan.country,
+        state: fan.state,
+        city: fan.city,
+        favoriteTrack: fan.favoriteTrack,
+        message: fan.message
+      }));
+
+      await appendBulkFansToSheet(adminToken, selectedSheetId, rowsToAppend);
+      setAdminStatus({ text: `Sucesso! ${unsyncedFans.length} novo(s) fã(s) sincronizado(s) no Google Sheets! 🤘`, type: 'success' });
+    } catch (e: any) {
+      setAdminStatus({ text: `Erro na sincronização: ${e.message}`, type: 'error' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDeleteLocalFan = async (id: string, name: string) => {
+    try {
+      const response = await fetch(`/api/fans/${id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (data.success) {
+        setLocalFans(prev => prev.filter(f => f.id !== id));
+        setAdminStatus({ text: `Cadastro de ${name} excluído com sucesso.`, type: 'success' });
+      } else {
+        setAdminStatus({ text: 'Erro ao excluir cadastro.', type: 'error' });
+      }
+    } catch (e: any) {
+      setAdminStatus({ text: `Erro: ${e.message}`, type: 'error' });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleRegisterFan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fanName || !fanEmail || !fanCountry || !fanState || !fanCity || !fanAge) return;
@@ -332,6 +610,7 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setFanSubmitStatus('success');
+        fetchLocalFans();
         setFanName('');
         setFanEmail('');
         setFanDdi('+55');
@@ -2305,6 +2584,368 @@ Só quero viver minha vida, mas não consigo...`
               SOUNDCLOUD
             </a>
           </div>
+
+          {/* TOGGLE BUTTON FOR ADMIN DASHBOARD */}
+          {(hasAdminQuery || (adminUser && adminUser.email?.toLowerCase().trim() === 'dgmilan@gmail.com')) && (
+            <div className="mt-8">
+              <button
+                onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
+                className="inline-flex items-center space-x-2 px-5 py-3 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-500/30 rounded-xl text-xs font-mono tracking-widest text-zinc-400 hover:text-emerald-400 transition-all uppercase cursor-pointer shadow-lg"
+              >
+                {isAdminPanelOpen ? (
+                  <>
+                    <Unlock className="w-4 h-4 text-emerald-400" />
+                    <span>Fechar Painel Administrativo</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 text-zinc-500" />
+                    <span>Acesso Administrativo (Google Sheets) 🔐</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* ADMIN DASHBOARD COMPONENT */}
+          {isAdminPanelOpen && (hasAdminQuery || (adminUser && adminUser.email?.toLowerCase().trim() === 'dgmilan@gmail.com')) && (
+            <div className="max-w-5xl mx-auto w-full bg-zinc-950 border border-zinc-805 rounded-2xl p-6 sm:p-8 mt-8 text-left relative overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.8)] space-y-8 animate-fadeIn">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-600"></div>
+              
+              {/* Header */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-zinc-900 pb-5 gap-4">
+                <div>
+                  <span className="font-mono text-xs text-emerald-400 font-bold uppercase tracking-widest block mb-1">// SYSTEM_ADMIN_INTEGRATION</span>
+                  <h3 className="font-orbitron font-black text-xl sm:text-2xl text-white tracking-wide uppercase">
+                    PAINEL DE CONEXÃO GOOGLE SHEETS
+                  </h3>
+                  <p className="text-zinc-400 text-xs mt-1 max-w-xl font-sans">
+                    Gerencie os fãs cadastrados localmente e sincronize-os diretamente com uma planilha do Google Drive de forma segura.
+                  </p>
+                </div>
+                
+                {/* Admin Status Header */}
+                {adminUser ? (
+                  <div className="flex items-center space-x-3 bg-zinc-900/40 border border-zinc-900 px-4 py-2 rounded-xl">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase block leading-none">Administrador</span>
+                      <span className="text-xs font-mono font-bold text-zinc-200 truncate max-w-[200px] block">{adminUser.email}</span>
+                    </div>
+                    <button
+                      onClick={handleAdminLogout}
+                      className="p-1.5 bg-zinc-900 hover:bg-rose-950/20 hover:text-rose-400 border border-zinc-800 hover:border-rose-900/50 rounded-lg transition-colors cursor-pointer"
+                      title="Sair"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2 bg-zinc-900/20 border border-zinc-900 px-3 py-1.5 rounded-lg text-[11px] font-mono text-zinc-500 uppercase">
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Acesso Restrito</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Message */}
+              {adminStatus.text && (
+                <div className={`p-4 rounded-xl border flex items-start space-x-3 text-xs font-mono leading-relaxed ${
+                  adminStatus.type === 'success' ? 'bg-emerald-950/10 border-emerald-500/20 text-emerald-400' :
+                  adminStatus.type === 'error' ? 'bg-rose-950/10 border-rose-500/20 text-rose-400' :
+                  'bg-zinc-900/40 border-zinc-800 text-zinc-300'
+                }`}>
+                  {adminStatus.type === 'success' ? (
+                    <Check className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-400" />
+                  ) : adminStatus.type === 'error' ? (
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400 animate-spin" />
+                  )}
+                  <span>{adminStatus.text}</span>
+                </div>
+              )}
+
+              {/* Core Panels Grid */}
+              {!adminUser ? (
+                /* LOGIN REQUIRED */
+                <div className="py-12 flex flex-col items-center text-center max-w-md mx-auto space-y-6">
+                  <div className="w-16 h-16 rounded-full bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500">
+                    <Lock className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="font-orbitron font-bold text-white uppercase tracking-wider">Autenticação do Administrador</h4>
+                    <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+                      Para conectar planilhas, criar novos arquivos de fã-clube e ler dados sincronizados, faça login com sua conta do Google.
+                    </p>
+                  </div>
+                  
+                  {/* Styled Google Sign-In Button */}
+                  <button 
+                    onClick={handleAdminLogin}
+                    className="inline-flex items-center space-x-3 px-6 py-3 bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs font-orbitron tracking-wider rounded-lg transition-all shadow-[0_4px_15px_rgba(255,255,255,0.1)] hover:shadow-[0_4px_20px_rgba(255,255,255,0.2)] cursor-pointer uppercase"
+                  >
+                    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4.5 h-4.5">
+                      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                    </svg>
+                    <span>Entrar com o Google</span>
+                  </button>
+                </div>
+              ) : (
+                /* LOGGED IN - CONTROLS */
+                <div className="space-y-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    
+                    {/* LEFT COLUMN: Spreadsheet Link/Status (5 Cols) */}
+                    <div className="lg:col-span-5 bg-zinc-900/20 border border-zinc-900 p-5 rounded-2xl space-y-5">
+                      <div className="flex items-center space-x-2 border-b border-zinc-900 pb-3">
+                        <FileSpreadsheet className="w-4.5 h-4.5 text-emerald-400" />
+                        <h4 className="font-orbitron font-bold text-xs uppercase tracking-wider text-white">CONEXÃO DA PLANILHA</h4>
+                      </div>
+
+                      {selectedSheetId ? (
+                        /* Connected spreadsheet panel */
+                        <div className="space-y-4">
+                          <div className="bg-emerald-950/10 border border-emerald-500/20 p-4 rounded-xl space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1">
+                                <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider block">Planilha Ativa</span>
+                                <strong className="text-sm text-zinc-100 block truncate max-w-[220px] font-sans">{selectedSheetName || "Cadastro de Fãs"}</strong>
+                              </div>
+                              <Check className="w-5 h-5 text-emerald-400" />
+                            </div>
+                            <span className="text-[10px] font-mono text-zinc-500 block truncate">ID: {selectedSheetId}</span>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <a
+                              href={selectedSheetUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/30 text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 rounded-lg transition-colors flex items-center justify-center space-x-2 cursor-pointer"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Abrir Planilha</span>
+                            </a>
+                            <button
+                              onClick={handleDisconnectSheet}
+                              className="py-2.5 px-4 bg-zinc-950 hover:bg-rose-950/15 border border-zinc-900 hover:border-rose-900/30 text-[11px] font-mono font-bold uppercase tracking-wider text-rose-500 rounded-lg transition-colors flex items-center justify-center space-x-2 cursor-pointer"
+                            >
+                              <span>Desvincular</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* No spreadsheet linked panel */
+                        <div className="space-y-4">
+                          <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-900 space-y-2">
+                            <span className="text-[10px] font-mono text-zinc-500 block uppercase tracking-wider">Status da Planilha</span>
+                            <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+                              Nenhuma planilha vinculada para sincronização de fã-clube.
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={handleCreateNewSheet}
+                            className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-xs font-bold font-orbitron tracking-widest uppercase text-white rounded-lg transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Criar Nova Planilha de Fãs</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Spreadsheet Picker / Selector from Drive */}
+                      {!selectedSheetId && (
+                        <div className="space-y-3 pt-3 border-t border-zinc-900">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold tracking-wider">Ou vincule uma existente:</span>
+                            <button
+                              onClick={() => searchSheets()}
+                              className="text-[10px] font-mono text-emerald-400 hover:underline cursor-pointer flex items-center space-x-1"
+                              disabled={isSearchingSheets}
+                            >
+                              <RefreshCw className={`w-3 h-3 ${isSearchingSheets ? 'animate-spin' : ''}`} />
+                              <span>Recarregar</span>
+                            </button>
+                          </div>
+
+                          {isSearchingSheets ? (
+                            <div className="py-4 text-center text-xs font-mono text-zinc-500">
+                              Buscando planilhas no Google Drive...
+                            </div>
+                          ) : availableSheets.length > 0 ? (
+                            <div className="max-h-[160px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                              {availableSheets.map((sheet) => (
+                                <button
+                                  key={sheet.id}
+                                  onClick={() => handleSelectSheet(sheet)}
+                                  className="w-full text-left p-2.5 bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 rounded-lg transition-colors flex items-center justify-between group cursor-pointer"
+                                >
+                                  <div className="min-w-0 pr-2">
+                                    <span className="text-xs font-mono font-bold text-zinc-300 block truncate group-hover:text-emerald-400 transition-colors">
+                                      {sheet.name}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] font-mono text-zinc-600 group-hover:text-emerald-400 border border-zinc-900 group-hover:border-emerald-500/20 px-2 py-0.5 rounded uppercase flex-shrink-0 transition-all">
+                                    Vincular
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-3 text-center rounded-lg border border-dashed border-zinc-900 text-xs font-mono text-zinc-600">
+                              Nenhuma planilha encontrada no Drive.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* RIGHT COLUMN: Database & Synchronization controls (7 Cols) */}
+                    <div className="lg:col-span-7 bg-zinc-900/20 border border-zinc-900 p-5 rounded-2xl space-y-5 flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <div className="flex items-center space-x-2 border-b border-zinc-900 pb-3">
+                          <Database className="w-4.5 h-4.5 text-emerald-400" />
+                          <h4 className="font-orbitron font-bold text-xs uppercase tracking-wider text-white">CENTRAL DE SINCRONIZAÇÃO</h4>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-xl">
+                            <span className="text-[10px] font-mono text-zinc-500 block uppercase tracking-wider mb-1">Cadastrados Locais</span>
+                            <strong className="text-2xl font-orbitron font-black text-white">{localFans.length}</strong>
+                            <span className="text-[9px] font-mono text-zinc-500 block mt-1">fãs no banco de dados</span>
+                          </div>
+                          <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-xl">
+                            <span className="text-[10px] font-mono text-zinc-500 block uppercase tracking-wider mb-1">Status Sinc</span>
+                            <strong className="text-sm font-mono block text-emerald-400 leading-tight uppercase mt-2.5">
+                              {selectedSheetId ? "Pronto" : "Não Vinculado"}
+                            </strong>
+                            <span className="text-[9px] font-mono text-zinc-500 block mt-1">
+                              {selectedSheetId ? "Planilha conectada" : "Requer planilha"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-zinc-400 text-xs leading-relaxed font-sans">
+                          A sincronização busca todos os cadastros guardados localmente no servidor e os adiciona à planilha Google vinculada, ignorando automaticamente qualquer e-mail que já tenha sido registrado para evitar duplicidades.
+                        </p>
+                      </div>
+
+                      <div className="pt-4 border-t border-zinc-900">
+                        <button
+                          onClick={handleSyncFans}
+                          disabled={isSyncing || !selectedSheetId}
+                          className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 text-xs font-bold font-orbitron tracking-widest uppercase text-zinc-950 rounded-lg transition-all flex items-center justify-center space-x-2 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] disabled:shadow-none"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                          <span>{isSyncing ? 'SINCRONIZANDO COM PLANILHA...' : 'SINCRONIZAR CADASTROS COM GOOGLE SHEETS 🤘'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* BOTTOM BLOCK: LOCAL REGISTRATIONS TABLE */}
+                  <div className="border-t border-zinc-900 pt-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Users className="w-4.5 h-4.5 text-pink-500" />
+                        <h4 className="font-orbitron font-bold text-xs uppercase tracking-wider text-white">
+                          HISTÓRICO DE CADASTROS (BASE LOCAL DO SERVIDOR)
+                        </h4>
+                      </div>
+                      <button
+                        onClick={fetchLocalFans}
+                        className="text-[10px] font-mono text-pink-400 hover:underline cursor-pointer flex items-center space-x-1"
+                        disabled={isLoadingLocalFans}
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isLoadingLocalFans ? 'animate-spin' : ''}`} />
+                        <span>Atualizar Lista</span>
+                      </button>
+                    </div>
+
+                    {isLoadingLocalFans ? (
+                      <div className="py-8 text-center text-xs font-mono text-zinc-500">
+                        Carregando registros de fãs...
+                      </div>
+                    ) : localFans.length > 0 ? (
+                      <div className="overflow-x-auto rounded-xl border border-zinc-900 bg-zinc-950">
+                        <table className="w-full text-left text-xs font-mono border-collapse">
+                          <thead>
+                            <tr className="bg-zinc-900/60 border-b border-zinc-900 text-zinc-400 uppercase text-[9px] tracking-wider">
+                              <th className="py-3 px-4">Fã</th>
+                              <th className="py-3 px-4">Localização</th>
+                              <th className="py-3 px-4">Música Favorita</th>
+                              <th className="py-3 px-4">Mensagem</th>
+                              <th className="py-3 px-4 text-right">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-900/50">
+                            {localFans.map((fan) => (
+                              <tr key={fan.id} className="hover:bg-zinc-900/20 text-zinc-300">
+                                <td className="py-3.5 px-4">
+                                  <span className="font-bold text-white block font-sans">{fan.name}</span>
+                                  <span className="text-[10px] text-zinc-500 block">{fan.email}</span>
+                                  {fan.phone && <span className="text-[9px] text-zinc-500 block">{fan.phone}</span>}
+                                </td>
+                                <td className="py-3.5 px-4 text-zinc-400">
+                                  <span className="block font-sans">{fan.city} - {fan.state}</span>
+                                  <span className="text-[10px] text-zinc-500 block font-sans">{fan.country} • {fan.age} anos</span>
+                                </td>
+                                <td className="py-3.5 px-4 text-emerald-400 font-semibold text-[11px] font-sans">
+                                  {fan.favoriteTrack}
+                                </td>
+                                <td className="py-3.5 px-4 max-w-[200px] truncate italic text-zinc-400 font-sans" title={fan.message}>
+                                  "{fan.message}"
+                                </td>
+                                <td className="py-3.5 px-4 text-right">
+                                  {deletingId === fan.id ? (
+                                    <div className="flex items-center justify-end space-x-1">
+                                      <button
+                                        onClick={() => handleDeleteLocalFan(fan.id, fan.name)}
+                                        className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900 text-rose-400 hover:text-rose-200 text-[10px] font-medium rounded-md transition-all cursor-pointer"
+                                        title="Confirmar exclusão"
+                                      >
+                                        Excluir
+                                      </button>
+                                      <button
+                                        onClick={() => setDeletingId(null)}
+                                        className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-[10px] font-medium rounded-md transition-all cursor-pointer"
+                                        title="Cancelar"
+                                      >
+                                        Não
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setDeletingId(fan.id)}
+                                      className="p-1.5 bg-zinc-950 hover:bg-rose-950/25 border border-zinc-900 hover:border-rose-900/30 rounded-lg text-zinc-500 hover:text-rose-500 transition-all cursor-pointer"
+                                      title="Excluir Registro"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-12 text-center rounded-xl border border-dashed border-zinc-900 text-xs font-mono text-zinc-500 space-y-2">
+                        <Users className="w-8 h-8 mx-auto text-zinc-700 animate-pulse" />
+                        <p>Nenhum fã cadastrado localmente até o momento.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Core copyrights stamp representing Cyber Mesoamerica */}
           <div className="mt-12 text-center text-[10px] font-mono tracking-[0.2em] text-zinc-600 space-y-2 uppercase">

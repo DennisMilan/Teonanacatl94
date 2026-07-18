@@ -90,7 +90,7 @@ async function startServer() {
     return transporter;
   }
 
-  // Simplified fan registration (No Database, sends CSV email attachment)
+  // Simplified fan registration (Saves to local JSON database, sends CSV email attachment)
   app.post("/api/fans/register", async (req, res) => {
     try {
       const { name, email, phone, instagram, tiktok, age, country, state, city, favoriteTrack, message } = req.body;
@@ -100,6 +100,91 @@ async function startServer() {
       }
 
       const timestamp = getTimestamp();
+
+      // Save to local JSON database file in Nanos folder
+      const fansDbPath = path.join(process.cwd(), "Nanos", "fans_db.json");
+      let fansList = [];
+      if (fs.existsSync(fansDbPath)) {
+        try {
+          const rawData = fs.readFileSync(fansDbPath, "utf-8");
+          fansList = JSON.parse(rawData);
+        } catch (e) {
+          console.error("Erro ao ler banco de dados de fãs local:", e);
+          fansList = [];
+        }
+      }
+      
+      const newFan = {
+        id: Date.now().toString() + "-" + Math.random().toString(36).substring(2, 7),
+        timestamp,
+        name,
+        email,
+        phone: phone || "",
+        instagram: instagram || "",
+        tiktok: tiktok || "",
+        age,
+        country,
+        state,
+        city,
+        favoriteTrack: favoriteTrack || "",
+        message: message || ""
+      };
+      
+      fansList.push(newFan);
+      fs.writeFileSync(fansDbPath, JSON.stringify(fansList, null, 2), "utf-8");
+
+      // Try to append directly to Google Sheets if configured
+      const sheetsConfigPath = path.join(process.cwd(), "Nanos", "sheets_config.json");
+      if (fs.existsSync(sheetsConfigPath)) {
+        try {
+          const configRaw = fs.readFileSync(sheetsConfigPath, "utf-8");
+          const config = JSON.parse(configRaw);
+          if (config.spreadsheetId && config.accessToken) {
+            console.log(`[GOOGLE SHEETS] Tentando inserir fã na planilha "${config.spreadsheetId}" em tempo real...`);
+            const range = "Fãs!A:L";
+            const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED`;
+            
+            const formattedPhone = phone ? (String(phone).startsWith("'") ? String(phone) : `'${phone}`) : "";
+
+            const row = [
+              timestamp,
+              name,
+              email,
+              formattedPhone,
+              instagram || "",
+              tiktok || "",
+              String(age),
+              country,
+              state,
+              city,
+              favoriteTrack || "",
+              message || ""
+            ];
+
+            const sheetsResponse = await fetch(sheetsUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${config.accessToken}`,
+              },
+              body: JSON.stringify({
+                range,
+                majorDimension: "ROWS",
+                values: [row],
+              }),
+            });
+
+            if (sheetsResponse.ok) {
+              console.log(`[GOOGLE SHEETS] Cadastro de fã ${name} inserido com sucesso na planilha.`);
+            } else {
+              const errData = await sheetsResponse.json().catch(() => ({}));
+              console.warn(`[GOOGLE SHEETS WARNING] Falha ao sincronizar em tempo real:`, errData);
+            }
+          }
+        } catch (sheetsError) {
+          console.error("[GOOGLE SHEETS ERROR] Erro ao sincronizar fã na planilha:", sheetsError);
+        }
+      }
 
       // Create CSV Attachment
       const sanitize = (val: string | number) => `"${(String(val || "")).replace(/"/g, '""')}"`;
@@ -280,6 +365,99 @@ async function startServer() {
     } catch (err: any) {
       console.error("Erro ao processar e enviar cadastro:", err);
       res.status(500).json({ error: err.message || "Erro interno ao processar cadastro." });
+    }
+  });
+
+  // Get all registered fans
+  app.get("/api/fans", (req, res) => {
+    try {
+      const fansDbPath = path.join(process.cwd(), "Nanos", "fans_db.json");
+      let fansList = [];
+      if (fs.existsSync(fansDbPath)) {
+        const rawData = fs.readFileSync(fansDbPath, "utf-8");
+        fansList = JSON.parse(rawData);
+      }
+      res.json({ success: true, fans: fansList });
+    } catch (err: any) {
+      console.error("Erro ao listar fãs:", err);
+      res.status(500).json({ error: err.message || "Erro interno ao listar fãs." });
+    }
+  });
+
+  // Delete a registered fan from local database
+  app.delete("/api/fans/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const fansDbPath = path.join(process.cwd(), "Nanos", "fans_db.json");
+      let fansList = [];
+      if (fs.existsSync(fansDbPath)) {
+        const rawData = fs.readFileSync(fansDbPath, "utf-8");
+        fansList = JSON.parse(rawData);
+      }
+      const filteredFans = fansList.filter((f: any) => f.id !== id);
+      fs.writeFileSync(fansDbPath, JSON.stringify(filteredFans, null, 2), "utf-8");
+      res.json({ success: true, message: "Cadastro excluído com sucesso." });
+    } catch (err: any) {
+      console.error("Erro ao excluir fã:", err);
+      res.status(500).json({ error: err.message || "Erro interno ao excluir fã." });
+    }
+  });
+
+  // Save Google Sheets config (For real-time sync on new registrations)
+  app.post("/api/admin/sheets-config", (req, res) => {
+    try {
+      const { spreadsheetId, accessToken, spreadsheetName, spreadsheetUrl } = req.body;
+      const sheetsConfigPath = path.join(process.cwd(), "Nanos", "sheets_config.json");
+      
+      let config: any = {};
+      if (fs.existsSync(sheetsConfigPath)) {
+        try {
+          config = JSON.parse(fs.readFileSync(sheetsConfigPath, "utf-8"));
+        } catch (e) {
+          config = {};
+        }
+      }
+
+      config = {
+        ...config,
+        spreadsheetId: spreadsheetId || config.spreadsheetId,
+        accessToken: accessToken || config.accessToken,
+        spreadsheetName: spreadsheetName || config.spreadsheetName,
+        spreadsheetUrl: spreadsheetUrl || config.spreadsheetUrl,
+        updatedAt: new Date().toISOString()
+      };
+
+      fs.writeFileSync(sheetsConfigPath, JSON.stringify(config, null, 2), "utf-8");
+      res.json({ success: true, message: "Configuração do Google Sheets atualizada no servidor com sucesso." });
+    } catch (err: any) {
+      console.error("Erro ao salvar configuração do Google Sheets no servidor:", err);
+      res.status(500).json({ error: err.message || "Erro ao salvar configuração no servidor." });
+    }
+  });
+
+  // Get stored Google Sheets config
+  app.get("/api/admin/sheets-config", (req, res) => {
+    try {
+      const sheetsConfigPath = path.join(process.cwd(), "Nanos", "sheets_config.json");
+      if (fs.existsSync(sheetsConfigPath)) {
+        const config = JSON.parse(fs.readFileSync(sheetsConfigPath, "utf-8"));
+        // Provide whether it is set
+        res.json({
+          success: true,
+          config: {
+            spreadsheetId: config.spreadsheetId,
+            spreadsheetName: config.spreadsheetName,
+            spreadsheetUrl: config.spreadsheetUrl,
+            hasToken: !!config.accessToken,
+            updatedAt: config.updatedAt
+          }
+        });
+      } else {
+        res.json({ success: true, config: null });
+      }
+    } catch (err: any) {
+      console.error("Erro ao ler configuração do Google Sheets do servidor:", err);
+      res.status(500).json({ error: err.message || "Erro ao ler configuração do servidor." });
     }
   });
 
