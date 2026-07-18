@@ -343,6 +343,14 @@ export default function App() {
   const [adminStatus, setAdminStatus] = useState<{ text: string; type: 'success' | 'error' | 'info' | null }>({ text: '', type: null });
   const [hasAdminQuery, setHasAdminQuery] = useState(false);
 
+  const showAdminButton =
+    hasAdminQuery ||
+    (adminUser && adminUser.email?.toLowerCase().trim() === 'dgmilan@gmail.com') ||
+    window.location.hostname.includes('localhost') ||
+    window.location.hostname.includes('127.0.0.1') ||
+    window.location.hostname.includes('ais-dev-') ||
+    window.location.hostname.includes('ais-pre-');
+
   // Fetch local fans
   const fetchLocalFans = async () => {
     setIsLoadingLocalFans(true);
@@ -2586,7 +2594,7 @@ Só quero viver minha vida, mas não consigo...`
           </div>
 
           {/* TOGGLE BUTTON FOR ADMIN DASHBOARD */}
-          {(hasAdminQuery || (adminUser && adminUser.email?.toLowerCase().trim() === 'dgmilan@gmail.com')) && (
+          {showAdminButton && (
             <div className="mt-8">
               <button
                 onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
@@ -2608,7 +2616,7 @@ Só quero viver minha vida, mas não consigo...`
           )}
 
           {/* ADMIN DASHBOARD COMPONENT */}
-          {isAdminPanelOpen && (hasAdminQuery || (adminUser && adminUser.email?.toLowerCase().trim() === 'dgmilan@gmail.com')) && (
+          {isAdminPanelOpen && showAdminButton && (
             <div className="max-w-5xl mx-auto w-full bg-zinc-950 border border-zinc-805 rounded-2xl p-6 sm:p-8 mt-8 text-left relative overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.8)] space-y-8 animate-fadeIn">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-600"></div>
               
