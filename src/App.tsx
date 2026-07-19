@@ -1931,7 +1931,7 @@ Só quero viver minha vida, mas não consigo...`
                     In Memoriam (†2021)
                   </div>
                   <p className="text-xs text-zinc-500 leading-relaxed font-mono">
-                    Compositor e Guitarrista de som cru, alma e voz original do projeto, falecido em 2021 por Covid.
+                    Compositor e Guitarrista de som visceral, alma e voz original do projeto, falecido em 2021 por Covid.
                   </p>
                 </div>
               </div>
@@ -2036,7 +2036,7 @@ Só quero viver minha vida, mas não consigo...`
               {/* Glowing label */}
               <p className="mt-4 text-xs font-mono text-amber-400 uppercase tracking-widest flex items-center space-x-2">
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b] animate-pulse"></span>
-                <span>OLHOS EM DESTAQUE ÂMBAR SUAVE</span>
+                <span>Bright Eyes: OLHOS EM DESTAQUE ÂMBAR SUAVE</span>
               </p>
 
             </div>
@@ -2087,7 +2087,7 @@ Só quero viver minha vida, mas não consigo...`
                     { text: "“Eu nunca fui embora.”", code: "PERSISTENCE_STATE" },
                     { text: "“Está dentro de nós.”", code: "RESONANCE_ENGAGED" },
                     { text: "“O som ficou.”", code: "ACOUSTIC_MEM_ACTIVE" },
-                    { text: "“O registro se perdeu. Eu não.”", code: "RECOVERED_STABLE" }
+                    { text: "“Don´t lose your Bright Eyes!”", code: "RECOVERED_STABLE" }
                   ].map((phrase, i) => (
                     <button
                       key={i}
